@@ -1,26 +1,21 @@
 pipeline {
-    agent any
-    
-    tools {
-        nodejs 'nodejs'  // Jenkins l'installera automatiquement
+    agent {
+        docker {
+            image 'node:18-alpine'  // Image avec NodeJS préinstallé
+            args '--privileged'     // Donne les permissions
+        }
     }
+    
+    // SUPPRIME la section tools et l'étape Setup System Dependencies
+    // tools {
+    //     nodejs 'nodejs'
+    // }
     
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
                 sh 'echo "📦 Code récupéré avec succès"'
-            }
-        }
-        
-        // AJOUTE CETTE NOUVELLE ÉTAPE
-        stage('Setup System Dependencies') {
-            steps {
-                sh '''
-                    apt-get update
-                    apt-get install -y libatomic1 build-essential
-                    echo "✅ Dépendances système installées"
-                '''
             }
         }
         
