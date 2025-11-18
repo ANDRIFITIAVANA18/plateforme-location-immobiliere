@@ -12,7 +12,6 @@ pipeline {
         stage('Build with Real Docker') {
             steps {
                 script {
-                    // Utilise Docker pour un build réel
                     docker.image('node:18-alpine').inside {
                         sh '''
                             echo "🔧 Installation des dépendances NodeJS..."
@@ -28,24 +27,11 @@ pipeline {
                 }
             }
         }
-        
-        stage('Deploy Simulation') {
-            steps {
-                sh '''
-                    echo "🚀 Simulation de déploiement Docker..."
-                    docker --version
-                    echo "✅ Docker opérationnel dans Jenkins !"
-                '''
-            }
-        }
     }
     
     post {
         success {
             sh 'echo "🎉 SUCCÈS TOTAL ! Pipeline CI/CD AVEC DOCKER FONCTIONNEL !"'
-        }
-        failure {
-            sh 'echo "❌ ÉCHEC - Vérifiez les logs"'
         }
     }
 }
