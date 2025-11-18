@@ -1,10 +1,6 @@
 pipeline {
     agent any
     
-    tools {
-        nodejs 'nodejs'  // Utilise NodeJS configuré dans Jenkins
-    }
-    
     stages {
         stage('Checkout') {
             steps {
@@ -13,17 +9,20 @@ pipeline {
             }
         }
         
-        stage('Install Dependencies') {
+        stage('Build with Docker') {
             steps {
-                sh 'npm install'  // Utilise install au lieu de ci
-                sh 'echo "✅ Dépendances installées"'
-            }
-        }
-        
-        stage('Build Frontend') {
-            steps {
-                sh 'npm run build'
-                sh 'echo "🏗️ Frontend construit avec succès"'
+                script {
+                    // Utilise Docker pour builder dans un environnement propre
+                    docker.image('node:18-alpine').inside {
+                        sh '''
+                            echo "🔧 Installation des dépendances..."
+                            npm install
+                            echo "🏗️ Construction du frontend..."
+                            npm run build
+                            echo "✅ Build réussi !"
+                        '''
+                    }
+                }
             }
         }
         
