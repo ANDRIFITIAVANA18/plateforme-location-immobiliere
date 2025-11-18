@@ -5,12 +5,21 @@ pipeline {
         stage('Test Docker') {
             steps {
                 sh '''
-                    echo "🔧 Test des permissions Docker..."
+                    echo "🔧 Test Docker final..."
                     docker --version
+                    echo "📋 Containers en cours:"
                     docker ps
-                    echo "✅ Docker fonctionne !"
+                    echo "🐳 Téléchargement NodeJS..."
+                    docker pull node:18-alpine
+                    echo "✅ DOCKER FONCTIONNE PARFAITEMENT !"
                 '''
             }
+        }
+    }
+    
+    post {
+        success {
+            sh 'echo "🎉 DOCKER OPÉRATIONNEL DANS JENKINS !"'
         }
     }
 }
