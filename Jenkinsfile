@@ -27,11 +27,25 @@ pipeline {
                 }
             }
         }
+        
+        stage('Verify Docker') {
+            steps {
+                sh '''
+                    echo "🚀 Vérification Docker..."
+                    docker --version
+                    docker ps
+                    echo "✅ Docker pleinement opérationnel dans Jenkins !"
+                '''
+            }
+        }
     }
     
     post {
         success {
-            sh 'echo "🎉 SUCCÈS TOTAL ! Pipeline CI/CD AVEC DOCKER FONCTIONNEL !"'
+            sh 'echo "🎉 SUCCÈS TOTAL ! Pipeline CI/CD COMPLET AVEC DOCKER FONCTIONNEL !"'
+        }
+        failure {
+            sh 'echo "❌ ÉCHEC - Vérifiez les logs"'
         }
     }
 }
