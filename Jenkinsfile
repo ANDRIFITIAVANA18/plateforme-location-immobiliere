@@ -31,7 +31,7 @@ stage('Auto-Fix Docker Permissions') {
             '''
             
             sleep 2
-=======
+
 
 pipeline {
     agent any
@@ -123,7 +123,7 @@ pipeline {
         }
         success {
             echo '🎉 SUCCÈS GARANTI - Même si Docker avait des problèmes !'
->>>>>>> 36be09c561cc17d0ec50dda1641a45d91b3feca1
+
         }
     }
 }
