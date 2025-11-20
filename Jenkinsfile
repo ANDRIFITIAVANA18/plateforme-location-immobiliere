@@ -95,11 +95,11 @@ pipeline {
                                 echo "🌐 Test des services..."
                                 
                                 # Test de l'application frontend (si disponible)
-                                if curl -s http://localhost:${MAIN_PORT} > /dev/null; then
+                                if curl -s http://localhost:3000 > /dev/null; then
                                     echo "✅ Application principale accessible"
                                     
                                     # Test de réponse HTTP détaillé
-                                    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${MAIN_PORT})
+                                    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000)
                                     echo "📊 HTTP Status: $HTTP_STATUS"
                                     
                                     if [ "$HTTP_STATUS" -eq 200 ]; then
@@ -159,14 +159,14 @@ pipeline {
                     def integrationTestsPassed = sh(script: 'cat integration_tests_passed.txt 2>/dev/null || echo "true"', returnStdout: true).trim() == 'true'
                     def securityScanPassed = sh(script: 'cat security_scan_passed.txt 2>/dev/null || echo "true"', returnStdout: true).trim() == 'true'
                     
-                    sh '''
+                    sh """
                         echo " "
                         echo "📊 RAPPORT DE QUALITÉ:"
                         echo "🔬 Tests unitaires: ${unitTestsPassed ? '✅ PASSÉ' : '❌ ÉCHEC'}"
                         echo "🔗 Tests intégration: ${integrationTestsPassed ? '✅ PASSÉ' : '❌ ÉCHEC'}" 
                         echo "🛡️  Scan sécurité: ${securityScanPassed ? '✅ PASSÉ' : '❌ ÉCHEC'}"
                         echo " "
-                    '''
+                    """
                     
                     // Validation finale
                     if (!unitTestsPassed || !integrationTestsPassed || !securityScanPassed) {
@@ -329,7 +329,7 @@ pipeline {
                         echo "📈 Test de charge (5 requêtes)..."
                         SUCCESS_COUNT=0
                         for i in {1..5}; do
-                            if curl -s http://localhost:${MAIN_PORT} > /dev/null; then
+                            if curl -s http://localhost:3000 > /dev/null; then
                                 echo "✅ Requête $i: SUCCÈS"
                                 SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
                             else
@@ -343,7 +343,7 @@ pipeline {
                         # Test de performance
                         echo "⏱️  Mesure des performances..."
                         START_TIME=$(date +%s%3N)
-                        curl -s http://localhost:${MAIN_PORT} > /dev/null
+                        curl -s http://localhost:3000 > /dev/null
                         END_TIME=$(date +%s%3N)
                         DURATION=$((END_TIME - START_TIME))
                         
@@ -375,11 +375,12 @@ pipeline {
                     def responseTime = sh(script: 'cat response_time.txt 2>/dev/null || echo "0"', returnStdout: true).trim()
                     def successCount = sh(script: 'cat success_count.txt 2>/dev/null || echo "5"', returnStdout: true).trim()
                     
-                    sh """
+                    // Utilisation de triple simple quotes pour éviter les problèmes d'échappement
+                    sh ''' 
                         echo " "
                         echo "🚀 RAPPORT COMPLET DE DÉPLOIEMENT AUTOMATISÉ"
                         echo "=============================================="
-                        echo "📊 Build Number: ${BUILD_NUMBER}"
+                        echo "📊 Build Number: ''' + env.BUILD_NUMBER + '''"
                         echo "🕐 Timestamp: $(date)"
                         echo " "
                         echo "🧪 RÉSULTATS DES TESTS:"
@@ -389,17 +390,17 @@ pipeline {
                         echo "   🚀 Tests post-déploiement: ✅ COMPLET"
                         echo " "
                         echo "📈 MÉTRIQUES PERFORMANCE:"
-                        echo "   ⏱️  Temps de réponse: ${responseTime}ms"
-                        echo "   📊 Taux de succès: ${successCount}/5"
+                        echo "   ⏱️  Temps de réponse: ''' + responseTime + '''ms"
+                        echo "   📊 Taux de succès: ''' + successCount + '''/5"
                         echo " "
                         echo "🌐 APPLICATION:"
                         echo "   🔗 URL: http://localhost:3000"
-                        echo "   🐳 Mode: ${dockerAvailable ? 'Docker' : 'Résilient'}"
+                        echo "   🐳 Mode: ''' + dockerAvailable + '''"
                         echo "   🛡️  Statut: DÉPLOIEMENT VALIDÉ"
                         echo " "
                         echo "✅ TOUS LES TESTS AUTOMATISÉS ONT ÉTÉ EXÉCUTÉS AVEC SUCCÈS"
                         echo " "
-                    """
+                    '''
                 }
             }
         }
@@ -412,7 +413,7 @@ pipeline {
             // 📊 Rapport final
             sh '''
                 echo " "
-                echo "📋 SYNTHÈSE DE L'EXÉCUTION:"
+                echo "📋 SYNTHÈSE DE L\'EXÉCUTION:"
                 echo "✅ Récupération du code: TERMINÉ"
                 echo "✅ Tests automatisés: TERMINÉ" 
                 echo "✅ Construction: TERMINÉ"
@@ -434,7 +435,7 @@ pipeline {
             echo '🎉 DÉPLOIEMENT AUTOMATIQUE RÉUSSI!'
             sh '''
                 echo " "
-                echo "✅ L'application a été déployée avec succès"
+                echo "✅ L\'application a été déployée avec succès"
                 echo "✅ Tous les tests automatisés ont passé"
                 echo "✅ Aucune interruption de service"
                 echo "🔄 Prochaine détection automatique dans 1 minute"
@@ -446,7 +447,7 @@ pipeline {
             sh '''
                 echo " "
                 echo "⚠️  Le déploiement a rencontré des problèmes"
-                echo "🛡️  L'ancienne version reste active"
+                echo "🛡️  L\'ancienne version reste active"
                 echo "🔧 Aucune interruption de service"
                 echo "📋 Consultez les logs pour diagnostiquer"
                 echo " "
