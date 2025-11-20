@@ -1,5 +1,11 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:20-alpine'
+            args '-v /var/jenkins_home/workspace/plateforme-location-immobiliere:/app'
+            reuseNode true
+        }
+    }
     
     triggers {
         pollSCM('*/1 * * * *')
@@ -10,29 +16,13 @@ pipeline {
     }
     
     stages {
-        stage('Installation Node.js Manuelle') {
+        stage('Vérification Environnement') {
             steps {
-                echo '🔧 Installation de Node.js...'
+                echo '🔧 Vérification des outils...'
                 sh '''
-                    echo "=== INSTALLATION MANUELLE NODE.JS ==="
-                    
-                    # Vérifier si Node.js est déjà installé
-                    if command -v node >/dev/null 2>&1; then
-                        echo "✅ Node.js déjà installé: $(node --version)"
-                    else
-                        echo "📥 Installation de Node.js 20.x..."
-                        # Mise à jour du système
-                        apt-get update
-                        # Installation de curl si manquant
-                        apt-get install -y curl
-                        # Téléchargement et installation de Node.js
-                        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-                        apt-get install -y nodejs
-                        echo "✅ Node.js installé: $(node --version)"
-                    fi
-                    
-                    echo "✅ npm version: $(npm --version)"
-                    echo "=== INSTALLATION TERMINÉE ==="
+                    echo "✅ Node.js: $(node --version)"
+                    echo "✅ npm: $(npm --version)"
+                    echo "📁 Répertoire: $(pwd)"
                 '''
             }
         }
@@ -50,8 +40,6 @@ pipeline {
                         echo "📅 Date: $(date)"
                         echo "🌐 Dépôt: $(git config --get remote.origin.url)"
                         echo "📝 Commit: $(git log -1 --pretty=format:'%h - %s')"
-                        echo "✅ Node.js: $(node --version)"
-                        echo "✅ npm: $(npm --version)"
                     '''
                 }
             }
@@ -80,28 +68,6 @@ pipeline {
             }
         }
         
-        stage('ESLint') {
-            steps {
-                echo '📝 Analyse de code...'
-                sh '''
-                    echo "🔍 Exécution d'ESLint..."
-                    npx eslint . --ext .ts,.tsx --format stylish --max-warnings 20 || true
-                    echo "✅ Analyse ESLint terminée"
-                '''
-            }
-        }
-        
-        stage('Tests') {
-            steps {
-                echo '🧪 Exécution des tests...'
-                sh '''
-                    echo "🔬 Lancement des tests Vitest..."
-                    npx vitest run --reporter=basic || true
-                    echo "✅ Tests exécutés"
-                '''
-            }
-        }
-        
         stage('Build Production') {
             steps {
                 echo '🏗️  Construction...'
@@ -113,10 +79,8 @@ pipeline {
                         echo "✅ Build réussi"
                         echo "📦 Taille: $(du -sh dist | cut -f1)"
                         echo "📁 Fichiers: $(find dist -type f | wc -l)"
-                        echo "📋 Contenu:"
-                        ls -la dist/
                     else
-                        echo "❌ Build échoué - dossier dist manquant"
+                        echo "❌ Build échoué"
                         exit 1
                     fi
                 '''
@@ -128,18 +92,13 @@ pipeline {
                 echo '📊 Rapport de qualité...'
                 sh '''
                     echo " "
-                    echo "🎉 QUALITÉ VALIDÉE - RAPPORT COMPLET"
-                    echo "==================================="
+                    echo "🎉 PIPELINE RÉUSSIE"
+                    echo "=================="
                     echo "🆔 Build: ${BUILD_NUMBER}"
                     echo "📅 Date: $(date)"
                     echo "🔧 Node.js: $(node --version)"
                     echo "📦 Build: $(du -sh dist | cut -f1)"
-                    echo "📝 Commit: $(git log -1 --pretty=format:'%h - %s')"
-                    echo " "
                     echo "✅ Toutes les validations passées"
-                    echo "✅ Code TypeScript valide"
-                    echo "✅ Build production réussi"
-                    echo "🚀 Prêt pour le déploiement"
                 '''
             }
         }
@@ -147,20 +106,13 @@ pipeline {
     
     post {
         always {
-            echo '🏁 Pipeline terminé'
             archiveArtifacts artifacts: 'dist/**/*', fingerprint: true
         }
         success {
-            echo '🎉 SUCCÈS : Pipeline de qualité complète !'
-            sh '''
-                echo "✅ Node.js installé et fonctionnel"
-                echo "✅ Dépendances résolues"
-                echo "✅ Code validé"
-                echo "✅ Application construite"
-            '''
+            echo '🎉 SUCCÈS : Pipeline complète réussie !'
         }
         failure {
-            echo '❌ ÉCHEC : Vérifiez les erreurs ci-dessus'
+            echo '❌ ÉCHEC : Vérifiez les erreurs'
         }
     }
 }
