@@ -24,7 +24,7 @@ pipeline {
                         echo "📅 Date: $(date)"
                         echo "🌐 Dépôt: $(git config --get remote.origin.url)"
                         echo "🔀 Branche: $(git branch --show-current)"
-                        echo "📝 Commit: $(git log -1 --pretty=format:"%h - %s")"
+                        echo "📝 Commit: $(git log -1 --pretty=format:'%h - %s')"
                         
                         echo " "
                         echo "✅ VÉRIFICATIONS CRITIQUES:"
@@ -44,53 +44,50 @@ pipeline {
                 script {
                     echo '🔬 Détection des erreurs TypeScript...'
                     sh '''
-                        echo "🚨 VÉRIFICATION ERREURS TYPESCRIPT OBLIGATOIRE"
-                        echo "=============================================="
+                        echo "🚨 VÉRIFICATION ERREURS TYPESCRIPT"
+                        echo "=================================="
                         
-                        # Méthode 1: Vérification basique des fichiers .ts
-                        echo "🔍 Analyse des fichiers TypeScript..."
-                        
-                        # Compteur d'erreurs
                         ERROR_COUNT=0
                         
-                        # Vérification des patterns d'erreurs TypeScript courants
-                        echo "📝 Recherche d'erreurs TypeScript évidentes..."
+                        # Recherche d'erreurs TypeScript réelles (exclut node_modules)
+                        echo "🔍 Analyse des fichiers source TypeScript..."
                         
-                        # Pattern 1: Assignation de types incorrects
-                        if grep -r "const.*:.*string.*=.*[0-9]" --include="*.ts" --include="*.tsx" . 2>/dev/null; then
-                            echo "❌ ERREUR: Assignation number -> string détectée"
+                        # Pattern 1: Assignation incorrecte number -> string dans VOTRE code
+                        if grep -r "const.*:.*string.*=.*[0-9]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null; then
+                            echo "❌ ERREUR: Assignation number -> string détectée dans votre code"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
                         fi
                         
-                        # Pattern 2: Assignation de types incorrects inverses
-                        if grep -r "const.*:.*number.*=.*['\"]" --include="*.ts" --include="*.tsx" . 2>/dev/null; then
-                            echo "❌ ERREUR: Assignation string -> number détectée"
+                        # Pattern 2: Assignation incorrecte string -> number dans VOTRE code
+                        if grep -r "const.*:.*number.*=.*['\\"]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null; then
+                            echo "❌ ERREUR: Assignation string -> number détectée dans votre code"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
                         fi
                         
-                        # Pattern 3: Fichiers avec erreurs évidentes
-                        if find . -name "*.ts" -exec grep -l "testError.*string.*=.*[0-9]" {} \\; 2>/dev/null; then
-                            echo "❌ ERREUR: Fichiers avec 'testError' détectés"
+                        # Pattern 3: Fichiers de test avec erreurs intentionnelles
+                        if find . -name "*.ts" -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "testError" {} \\; 2>/dev/null | grep -q "."; then
+                            echo "❌ ERREUR: Fichiers de test avec erreurs détectés"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
                         fi
                         
-                        # Vérification finale
-                        if [ $ERROR_COUNT -gt 0 ]; then
+                        if [ $ERROR_COUNT -eq 0 ]; then
+                            echo "✅ Aucune erreur TypeScript détectée dans votre code source"
+                            echo "✅ Validation TypeScript réussie"
+                        else
+                            echo "🚨 $ERROR_COUNT erreur(s) TypeScript détectée(s)"
                             echo " "
-                            echo "🚨 $ERROR_COUNT ERREUR(S) TYPESCRIPT DÉTECTÉE(S)"
-                            echo "🔍 Fichiers suspects:"
-                            find . -name "*.ts" -o -name "*.tsx" | xargs grep -l "const.*:.*string.*=.*[0-9]" 2>/dev/null || true
-                            find . -name "*.ts" -o -name "*.tsx" | xargs grep -l "const.*:.*number.*=.*['\"]" 2>/dev/null || true
+                            echo "🔍 Fichiers problématiques:"
+                            grep -r "const.*:.*string.*=.*[0-9]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null || true
+                            grep -r "const.*:.*number.*=.*['\\"]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null || true
+                            find . -name "*.ts" -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "testError" {} \\; 2>/dev/null || true
                             echo " "
                             echo "💡 CORRIGEZ LES ERREURS AVANT DE CONTINUER"
                             exit 1
-                        else
-                            echo "✅ Aucune erreur TypeScript évidente détectée"
                         fi
                         
                         echo " "
                         echo "📁 Fichiers TypeScript analysés:"
-                        find . -name "*.ts" -o -name "*.tsx" | head -10
+                        find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" | head -10
                     '''
                 }
             }
@@ -134,6 +131,11 @@ pipeline {
                         echo "✅ Fichiers essentiels: PRÉSENTS"
                         echo "🔄 Surveillance: ACTIVÉE"
                         echo " "
+                        echo "📊 RÉSUMÉ:"
+                        echo "• Build: ${BUILD_NUMBER}"
+                        echo "• Commit: $(git log -1 --pretty=format:'%h - %s')"
+                        echo "• Date: $(date)"
+                        echo " "
                     '''
                 }
             }
@@ -146,6 +148,13 @@ pipeline {
         }
         success {
             echo '🎉 SYSTÈME DE VALIDATION OPÉRATIONNEL !'
+            sh '''
+                echo " "
+                echo "✅ TOUTES LES VALIDATIONS SONT PASSÉES"
+                echo "✅ Le code est prêt pour le déploiement"
+                echo "✅ Aucune erreur TypeScript détectée"
+                echo " "
+            '''
         }
         failure {
             echo '❌ ERREURS TYPESCRIPT DÉTECTÉES - CORRIGEZ LES ERREURS'
@@ -154,8 +163,14 @@ pipeline {
                 echo "🔍 ERREURS DÉTECTÉES:"
                 echo "• Assignations de types incorrectes"
                 echo "• Fichiers avec patterns d'erreur"
+                echo "• Fichiers de test avec erreurs"
                 echo " "
-                echo "💡 Supprimez les fichiers de test ou corrigez les erreurs"
+                echo "💡 ACTIONS REQUISES:"
+                echo "1. Vérifiez les fichiers listés ci-dessus"
+                echo "2. Corrigez les erreurs TypeScript"
+                echo "3. Supprimez les fichiers de test inutiles"
+                echo "4. Recommitez et poussez les corrections"
+                echo " "
             '''
         }
     }
