@@ -8,7 +8,6 @@ pipeline {
     environment {
         IMAGE_NAME = 'plateforme-location-immobiliere'
         MAIN_PORT = '3000'
-        NODE_VERSION = '18'
     }
     
     stages {
@@ -20,14 +19,20 @@ pipeline {
                         #!/bin/bash
                         set -e
                         
-                        # Configuration NVM avec . au lieu de source
+                        # Configuration NVM
                         export NVM_DIR="/var/jenkins_home/.nvm"
                         if [ -s "$NVM_DIR/nvm.sh" ]; then
                             . "$NVM_DIR/nvm.sh"
-                            nvm use ${NODE_VERSION} || nvm install ${NODE_VERSION}
+                            nvm use 18.20.8 || nvm install 18.20.8
                             echo "✅ Node.js $(node --version) configuré"
+                            echo "✅ npm $(npm --version) configuré"
+                            
+                            # Sauvegarder le PATH pour les étapes suivantes
+                            echo "NODE_PATH=$(which node)" > node_env.txt
+                            echo "NPM_PATH=$(which npm)" >> node_env.txt
                         else
-                            echo "⚠️  NVM non disponible, utilisation du Node.js système"
+                            echo "❌ NVM non disponible"
+                            exit 1
                         fi
                     '''
                 }
@@ -45,6 +50,13 @@ pipeline {
                         #!/bin/bash
                         set -e
                         
+                        # Recharger l'environnement Node.js
+                        export NVM_DIR="/var/jenkins_home/.nvm"
+                        if [ -s "$NVM_DIR/nvm.sh" ]; then
+                            . "$NVM_DIR/nvm.sh"
+                            nvm use 18.20.8
+                        fi
+                        
                         echo "📊 INFORMATIONS DU PROJET:"
                         echo "🆔 Build: ${BUILD_NUMBER}"
                         echo "📅 Date: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -56,11 +68,10 @@ pipeline {
                         echo ""
                         echo "✅ VÉRIFICATIONS CRITIQUES:"
                         
-                        # Fichiers essentiels - version compatible
+                        # Fichiers essentiels
                         echo "📁 Fichiers essentiels:"
                         MISSING_FILES=0
                         
-                        # Vérification individuelle des fichiers
                         if [ -f "package.json" ]; then
                             echo "  ✅ package.json"
                         else
@@ -92,13 +103,20 @@ pipeline {
                             echo ""
                             echo "📦 ANALYSE PACKAGE.JSON:"
                             node -e "
-                                const pkg = require('./package.json');
-                                console.log('  Nom:', pkg.name || 'Non spécifié');
-                                console.log('  Version:', pkg.version || 'Non spécifié');
-                                console.log('  Description:', pkg.description || 'Non spécifié');
-                                console.log('  Scripts:', Object.keys(pkg.scripts || {}).join(', ') || 'Aucun');
+                                try {
+                                    const pkg = require('./package.json');
+                                    console.log('  Nom:', pkg.name || 'Non spécifié');
+                                    console.log('  Version:', pkg.version || 'Non spécifié');
+                                    console.log('  Description:', pkg.description || 'Non spécifié');
+                                    const scripts = Object.keys(pkg.scripts || {});
+                                    console.log('  Scripts:', scripts.length > 0 ? scripts.join(', ') : 'Aucun');
+                                } catch (e) {
+                                    console.log('  ❌ Erreur lecture package.json');
+                                }
                             "
                         fi
+                        
+                        echo "✅ Environnement Node.js: $(node --version)"
                     '''
                 }
             }
@@ -112,35 +130,39 @@ pipeline {
                         #!/bin/bash
                         set -e
                         
+                        # Recharger l'environnement Node.js
+                        export NVM_DIR="/var/jenkins_home/.nvm"
+                        if [ -s "$NVM_DIR/nvm.sh" ]; then
+                            . "$NVM_DIR/nvm.sh"
+                            nvm use 18.20.8
+                        fi
+                        
                         echo "🚨 VÉRIFICATION ERREURS TYPESCRIPT"
                         echo "=================================="
                         
                         ERROR_COUNT=0
                         
-                        # Recherche d'erreurs TypeScript réelles (exclut node_modules)
+                        # Recherche d'erreurs TypeScript réelles
                         echo "🔍 Analyse des fichiers source TypeScript..."
                         
                         # Pattern 1: Assignation incorrecte number -> string
-                        PATTERN1_FILES=$(grep -r "const.*:.*string.*=.*[0-9]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null | head -5 | cat)
-                        if [ -n "$PATTERN1_FILES" ]; then
-                            echo "❌ ERREUR: Assignation number -> string détectée:"
-                            echo "$PATTERN1_FILES"
+                        if grep -r "const.*:.*string.*=.*[0-9]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules > /dev/null 2>&1; then
+                            echo "❌ ERREUR: Assignation number -> string détectée"
+                            grep -r "const.*:.*string.*=.*[0-9]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules | head -3
                             ERROR_COUNT=$((ERROR_COUNT + 1))
                         fi
                         
                         # Pattern 2: Assignation incorrecte string -> number
-                        PATTERN2_FILES=$(grep -r "const.*:.*number.*=.*['\\"]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null | head -5 | cat)
-                        if [ -n "$PATTERN2_FILES" ]; then
-                            echo "❌ ERREUR: Assignation string -> number détectée:"
-                            echo "$PATTERN2_FILES"
+                        if grep -r "const.*:.*number.*=.*['\\"]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules > /dev/null 2>&1; then
+                            echo "❌ ERREUR: Assignation string -> number détectée"
+                            grep -r "const.*:.*number.*=.*['\\"]" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules | head -3
                             ERROR_COUNT=$((ERROR_COUNT + 1))
                         fi
                         
                         # Pattern 3: Fichiers de test avec erreurs intentionnelles
-                        PATTERN3_FILES=$(find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "testError" {} \\; 2>/dev/null | head -5 | cat)
-                        if [ -n "$PATTERN3_FILES" ]; then
-                            echo "❌ ERREUR: Fichiers de test avec erreurs détectés:"
-                            echo "$PATTERN3_FILES"
+                        if find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "testError" {} \\; > /dev/null 2>&1; then
+                            echo "❌ ERREUR: Fichiers de test avec erreurs détectés"
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "testError" {} \\; | head -3
                             ERROR_COUNT=$((ERROR_COUNT + 1))
                         fi
                         
@@ -175,28 +197,22 @@ pipeline {
                         
                         echo "📋 VÉRIFICATIONS STRUCTURELLES:"
                         
-                        # Fichiers sensibles - version compatible
+                        # Fichiers sensibles
                         SENSITIVE_COUNT=0
                         
                         if [ -f ".env" ]; then
                             echo "⚠️  Fichier sensible présent: .env"
                             SENSITIVE_COUNT=$((SENSITIVE_COUNT + 1))
-                            FILE_SIZE=$(stat -c%s ".env" 2>/dev/null || stat -f%z ".env" 2>/dev/null)
-                            echo "    Taille: ${FILE_SIZE} octets"
                         fi
                         
                         if [ -f ".env.local" ]; then
                             echo "⚠️  Fichier sensible présent: .env.local"
                             SENSITIVE_COUNT=$((SENSITIVE_COUNT + 1))
-                            FILE_SIZE=$(stat -c%s ".env.local" 2>/dev/null || stat -f%z ".env.local" 2>/dev/null)
-                            echo "    Taille: ${FILE_SIZE} octets"
                         fi
                         
                         if [ -f ".env.production" ]; then
                             echo "⚠️  Fichier sensible présent: .env.production"
                             SENSITIVE_COUNT=$((SENSITIVE_COUNT + 1))
-                            FILE_SIZE=$(stat -c%s ".env.production" 2>/dev/null || stat -f%z ".env.production" 2>/dev/null)
-                            echo "    Taille: ${FILE_SIZE} octets"
                         fi
                         
                         if [ $SENSITIVE_COUNT -eq 0 ]; then
@@ -216,68 +232,11 @@ pipeline {
                             BUILD_PRESENT=1
                         fi
                         
-                        if [ -d "out" ]; then
-                            echo "📁 Dossier de build présent: out"
-                            BUILD_PRESENT=1
-                        fi
-                        
-                        if [ -d ".next" ]; then
-                            echo "📁 Dossier de build présent: .next"
-                            BUILD_PRESENT=1
-                        fi
-                        
                         if [ $BUILD_PRESENT -eq 0 ]; then
                             echo "📁 Aucun dossier de build détecté"
                         fi
                         
-                        # Vérification de la structure des dossiers
-                        echo ""
-                        echo "📁 STRUCTURE DES DOSSIERS:"
-                        find . -maxdepth 2 -type d ! -path "./node_modules" ! -path "./.git" | sort | head -15
-                        
                         echo "✅ Structure validée"
-                    '''
-                }
-            }
-        }
-        
-        stage('Dependencies Check') {
-            steps {
-                script {
-                    echo '📦 Vérification des dépendances...'
-                    sh '''
-                        #!/bin/bash
-                        set +e  # Continuer même en cas d'erreur pour ce stage
-                        
-                        if [ -f "package.json" ]; then
-                            echo "🔍 ANALYSE DES DÉPENDANCES:"
-                            
-                            # Vérification de la présence des dépendances critiques
-                            node -e "
-                                const pkg = require('./package.json');
-                                const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-                                const criticalDeps = ['react', 'typescript', '@types/react'];
-                                
-                                criticalDeps.forEach(dep => {
-                                    if (deps[dep]) {
-                                        console.log('  ✅ ' + dep + ': ' + deps[dep]);
-                                    } else {
-                                        console.log('  ⚠️  ' + dep + ': NON TROUVÉ');
-                                    }
-                                });
-                            " || echo "⚠️  Impossible d'analyser package.json"
-                            
-                            # Vérification de l'existence de node_modules
-                            if [ -d "node_modules" ]; then
-                                echo "📁 node_modules: PRÉSENT"
-                            else
-                                echo "📁 node_modules: ABSENT (normal en CI)"
-                            fi
-                        else
-                            echo "❌ package.json non trouvé pour l'analyse des dépendances"
-                        fi
-                        
-                        echo "✅ Vérification des dépendances terminée"
                     '''
                 }
             }
@@ -289,13 +248,21 @@ pipeline {
                     echo '📊 Rapport final...'
                     sh '''
                         #!/bin/bash
+                        set -e
+                        
+                        # Recharger l'environnement Node.js
+                        export NVM_DIR="/var/jenkins_home/.nvm"
+                        if [ -s "$NVM_DIR/nvm.sh" ]; then
+                            . "$NVM_DIR/nvm.sh"
+                            nvm use 18.20.8
+                        fi
+                        
                         echo ""
                         echo "🎉 VALIDATION RÉUSSIE"
                         echo "===================="
                         echo "✅ Aucune erreur TypeScript détectée"
                         echo "✅ Structure projet: VALIDE"
                         echo "✅ Fichiers essentiels: PRÉSENTS"
-                        echo "✅ Dépendances: ANALYSÉES"
                         echo "🔄 Surveillance: ACTIVÉE"
                         echo ""
                         echo "📊 RÉSUMÉ DÉTAILLÉ:"
@@ -303,7 +270,7 @@ pipeline {
                         echo "• Commit: $(git log -1 --pretty=format:'%h - %s')"
                         echo "• Auteur: $(git log -1 --pretty=format:'%an')"
                         echo "• Date: $(date '+%Y-%m-%d %H:%M:%S')"
-                        echo "• Node.js: $(node --version 2>/dev/null || echo 'Non disponible')"
+                        echo "• Node.js: $(node --version)"
                         echo ""
                         echo "🚀 PRÊT POUR LE DÉPLOIEMENT"
                     '''
@@ -315,33 +282,20 @@ pipeline {
     post {
         always {
             echo '🏁 Pipeline de validation terminé'
-            sh '''
-                #!/bin/bash
-                echo ""
-                echo "⏱️  Durée du build: ${currentBuild.durationString}"
-                echo "🔗 URL du build: ${env.BUILD_URL}"
-            '''
         }
         success {
             echo '🎉 SYSTÈME DE VALIDATION OPÉRATIONNEL !'
             sh '''
-                #!/bin/bash
                 echo ""
                 echo "✅ TOUTES LES VALIDATIONS SONT PASSÉES"
                 echo "✅ Le code est prêt pour le déploiement"
                 echo "✅ Aucune erreur TypeScript détectée"
                 echo "✅ Structure du projet validée"
-                echo ""
-                echo "📈 MÉTRIQUES:"
-                echo "• Build réussi: ${currentBuild.number}"
-                echo "• Dernier commit valide: $(git log -1 --pretty=format:'%h')"
-                echo "• Statut: STABLE"
             '''
         }
         failure {
             echo '❌ ERREURS DÉTECTÉES - CORRIGEZ LES ERREURS'
             sh '''
-                #!/bin/bash
                 echo ""
                 echo "🔍 ERREURS DÉTECTÉES:"
                 echo "• Assignations de types incorrectes"
@@ -355,20 +309,6 @@ pipeline {
                 echo "3. Supprimez les fichiers de test inutiles"
                 echo "4. Vérifiez la présence des fichiers essentiels"
                 echo "5. Recommitez et poussez les corrections"
-                echo ""
-                echo "🆘 SUPPORT:"
-                echo "• Consultez les logs détaillés ci-dessus"
-                echo "• Vérifiez la cohérence des types TypeScript"
-                echo "• Supprimez le code de test en production"
-            '''
-        }
-        cleanup {
-            echo '🧹 Nettoyage des ressources...'
-            sh '''
-                #!/bin/bash
-                echo "✅ Nettoyage terminé"
-                echo "💾 Utilisation disque:"
-                df -h . | tail -1
             '''
         }
     }
