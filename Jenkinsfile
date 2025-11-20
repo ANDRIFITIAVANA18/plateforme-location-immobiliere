@@ -56,19 +56,31 @@ pipeline {
                         echo ""
                         echo "✅ VÉRIFICATIONS CRITIQUES:"
                         
-                        # Fichiers essentiels avec vérification améliorée
+                        # Fichiers essentiels - version compatible
                         echo "📁 Fichiers essentiels:"
-                        ESSENTIAL_FILES=("package.json" "Dockerfile" "src/App.tsx")
                         MISSING_FILES=0
                         
-                        for file in "${ESSENTIAL_FILES[@]}"; do
-                            if [ -f "$file" ]; then
-                                echo "  ✅ $file"
-                            else
-                                echo "  ❌ $file MANQUANT"
-                                MISSING_FILES=$((MISSING_FILES + 1))
-                            fi
-                        done
+                        # Vérification individuelle des fichiers
+                        if [ -f "package.json" ]; then
+                            echo "  ✅ package.json"
+                        else
+                            echo "  ❌ package.json MANQUANT"
+                            MISSING_FILES=$((MISSING_FILES + 1))
+                        fi
+                        
+                        if [ -f "Dockerfile" ]; then
+                            echo "  ✅ Dockerfile"
+                        else
+                            echo "  ❌ Dockerfile MANQUANT"
+                            MISSING_FILES=$((MISSING_FILES + 1))
+                        fi
+                        
+                        if [ -f "src/App.tsx" ]; then
+                            echo "  ✅ App.tsx"
+                        else
+                            echo "  ❌ App.tsx MANQUANT"
+                            MISSING_FILES=$((MISSING_FILES + 1))
+                        fi
                         
                         if [ $MISSING_FILES -gt 0 ]; then
                             echo "🚨 $MISSING_FILES fichier(s) essentiel(s) manquant(s)"
@@ -104,7 +116,6 @@ pipeline {
                         echo "=================================="
                         
                         ERROR_COUNT=0
-                        ERROR_FILES=()
                         
                         # Recherche d'erreurs TypeScript réelles (exclut node_modules)
                         echo "🔍 Analyse des fichiers source TypeScript..."
@@ -115,7 +126,6 @@ pipeline {
                             echo "❌ ERREUR: Assignation number -> string détectée:"
                             echo "$PATTERN1_FILES"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
-                            ERROR_FILES+=("$PATTERN1_FILES")
                         fi
                         
                         # Pattern 2: Assignation incorrecte string -> number
@@ -124,7 +134,6 @@ pipeline {
                             echo "❌ ERREUR: Assignation string -> number détectée:"
                             echo "$PATTERN2_FILES"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
-                            ERROR_FILES+=("$PATTERN2_FILES")
                         fi
                         
                         # Pattern 3: Fichiers de test avec erreurs intentionnelles
@@ -133,7 +142,6 @@ pipeline {
                             echo "❌ ERREUR: Fichiers de test avec erreurs détectés:"
                             echo "$PATTERN3_FILES"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
-                            ERROR_FILES+=("$PATTERN3_FILES")
                         fi
                         
                         # Statistiques d'analyse
@@ -148,11 +156,6 @@ pipeline {
                             echo "✅ Validation TypeScript réussie"
                         else
                             echo "🚨 $ERROR_COUNT erreur(s) TypeScript détectée(s)"
-                            echo ""
-                            echo "🔍 Fichiers problématiques:"
-                            for file in "${ERROR_FILES[@]}"; do
-                                echo "$file"
-                            done
                             echo ""
                             echo "💡 CORRIGEZ LES ERREURS AVANT DE CONTINUER"
                             exit 1
@@ -172,35 +175,56 @@ pipeline {
                         
                         echo "📋 VÉRIFICATIONS STRUCTURELLES:"
                         
-                        # Fichiers sensibles avec vérification de sécurité
-                        SENSITIVE_FILES=(".env" ".env.local" ".env.production")
+                        # Fichiers sensibles - version compatible
                         SENSITIVE_COUNT=0
                         
-                        for file in "${SENSITIVE_FILES[@]}"; do
-                            if [ -f "$file" ]; then
-                                echo "⚠️  Fichier sensible présent: $file"
-                                SENSITIVE_COUNT=$((SENSITIVE_COUNT + 1))
-                                
-                                # Vérification basique du contenu
-                                FILE_SIZE=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null)
-                                echo "    Taille: ${FILE_SIZE} octets"
-                            fi
-                        done
+                        if [ -f ".env" ]; then
+                            echo "⚠️  Fichier sensible présent: .env"
+                            SENSITIVE_COUNT=$((SENSITIVE_COUNT + 1))
+                            FILE_SIZE=$(stat -c%s ".env" 2>/dev/null || stat -f%z ".env" 2>/dev/null)
+                            echo "    Taille: ${FILE_SIZE} octets"
+                        fi
+                        
+                        if [ -f ".env.local" ]; then
+                            echo "⚠️  Fichier sensible présent: .env.local"
+                            SENSITIVE_COUNT=$((SENSITIVE_COUNT + 1))
+                            FILE_SIZE=$(stat -c%s ".env.local" 2>/dev/null || stat -f%z ".env.local" 2>/dev/null)
+                            echo "    Taille: ${FILE_SIZE} octets"
+                        fi
+                        
+                        if [ -f ".env.production" ]; then
+                            echo "⚠️  Fichier sensible présent: .env.production"
+                            SENSITIVE_COUNT=$((SENSITIVE_COUNT + 1))
+                            FILE_SIZE=$(stat -c%s ".env.production" 2>/dev/null || stat -f%z ".env.production" 2>/dev/null)
+                            echo "    Taille: ${FILE_SIZE} octets"
+                        fi
                         
                         if [ $SENSITIVE_COUNT -eq 0 ]; then
                             echo "✅ Aucun fichier sensible détecté"
                         fi
                         
                         # Dossiers de build
-                        BUILD_DIRS=("dist" "build" "out" ".next")
                         BUILD_PRESENT=0
                         
-                        for dir in "${BUILD_DIRS[@]}"; do
-                            if [ -d "$dir" ]; then
-                                echo "📁 Dossier de build présent: $dir"
-                                BUILD_PRESENT=1
-                            fi
-                        done
+                        if [ -d "dist" ]; then
+                            echo "📁 Dossier de build présent: dist"
+                            BUILD_PRESENT=1
+                        fi
+                        
+                        if [ -d "build" ]; then
+                            echo "📁 Dossier de build présent: build"
+                            BUILD_PRESENT=1
+                        fi
+                        
+                        if [ -d "out" ]; then
+                            echo "📁 Dossier de build présent: out"
+                            BUILD_PRESENT=1
+                        fi
+                        
+                        if [ -d ".next" ]; then
+                            echo "📁 Dossier de build présent: .next"
+                            BUILD_PRESENT=1
+                        fi
                         
                         if [ $BUILD_PRESENT -eq 0 ]; then
                             echo "📁 Aucun dossier de build détecté"
