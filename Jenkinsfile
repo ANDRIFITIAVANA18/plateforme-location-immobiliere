@@ -20,10 +20,10 @@ pipeline {
                         #!/bin/bash
                         set -e
                         
-                        # Configuration NVM
+                        # Configuration NVM avec . au lieu de source
                         export NVM_DIR="/var/jenkins_home/.nvm"
                         if [ -s "$NVM_DIR/nvm.sh" ]; then
-                            source "$NVM_DIR/nvm.sh"
+                            . "$NVM_DIR/nvm.sh"
                             nvm use ${NODE_VERSION} || nvm install ${NODE_VERSION}
                             echo "✅ Node.js $(node --version) configuré"
                         else
@@ -292,6 +292,7 @@ pipeline {
         always {
             echo '🏁 Pipeline de validation terminé'
             sh '''
+                #!/bin/bash
                 echo ""
                 echo "⏱️  Durée du build: ${currentBuild.durationString}"
                 echo "🔗 URL du build: ${env.BUILD_URL}"
@@ -300,6 +301,7 @@ pipeline {
         success {
             echo '🎉 SYSTÈME DE VALIDATION OPÉRATIONNEL !'
             sh '''
+                #!/bin/bash
                 echo ""
                 echo "✅ TOUTES LES VALIDATIONS SONT PASSÉES"
                 echo "✅ Le code est prêt pour le déploiement"
@@ -315,6 +317,7 @@ pipeline {
         failure {
             echo '❌ ERREURS DÉTECTÉES - CORRIGEZ LES ERREURS'
             sh '''
+                #!/bin/bash
                 echo ""
                 echo "🔍 ERREURS DÉTECTÉES:"
                 echo "• Assignations de types incorrectes"
@@ -338,6 +341,7 @@ pipeline {
         cleanup {
             echo '🧹 Nettoyage des ressources...'
             sh '''
+                #!/bin/bash
                 echo "✅ Nettoyage terminé"
                 echo "💾 Utilisation disque:"
                 df -h . | tail -1
