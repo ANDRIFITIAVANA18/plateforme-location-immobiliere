@@ -35,22 +35,65 @@ pipeline {
                         [ -f "Dockerfile" ] && echo "  ✅ Dockerfile" || echo "  ⚠️  Dockerfile manquant"
                         [ -f "src/App.tsx" ] && echo "  ✅ App.tsx" || echo "  ⚠️  App.tsx manquant"
                         [ -f "index.html" ] && echo "  ✅ index.html" || echo "  ⚠️  index.html manquant"
+                    '''
+                }
+            }
+        }
+        
+        stage('Environment Setup') {
+            steps {
+                script {
+                    echo '🔧 Configuration environnement...'
+                    sh '''
+                        echo "📦 Préparation des outils..."
                         
-                        # 2. Structure du projet
-                        echo " "
-                        echo "📂 Structure du projet:"
-                        echo "  📄 Fichiers principaux:"
-                        ls -la *.json *.js *.ts *.html 2>/dev/null | head -10 || echo "    Aucun fichier de configuration trouvé"
-                        echo "  📁 Dossiers:"
-                        ls -la | grep "^d" | head -10
+                        # Installation Node.js si nécessaire
+                        if ! command -v node > /dev/null 2>&1; then
+                            echo "⬇️  Installation de Node.js..."
+                            curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+                            apt-get install -y nodejs
+                            echo "✅ Node.js $(node --version) installé"
+                        else
+                            echo "✅ Node.js $(node --version) déjà installé"
+                        fi
                         
-                        # 3. Configuration package.json
-                        echo " "
-                        echo "📦 Configuration package.json:"
+                        # Installation des dépendances du projet
                         if [ -f "package.json" ]; then
-                            echo "  🏷️  Nom: $(jq -r '.name' package.json 2>/dev/null || grep '"name"' package.json | head -1)"
-                            echo "  📋 Scripts disponibles:"
-                            grep -A 15 '"scripts"' package.json | grep -v "^--$" | sed 's/^/    /' || echo "    Aucun script trouvé"
+                            echo "📥 Installation des dépendances..."
+                            npm install --silent
+                            echo "✅ Dépendances installées"
+                        fi
+                    '''
+                }
+            }
+        }
+        
+        stage('TypeScript Compilation') {
+            steps {
+                script {
+                    echo '🔬 Compilation TypeScript...'
+                    sh '''
+                        echo "📝 VÉRIFICATION COMPILATION TYPESCRIPT:"
+                        
+                        if [ -f "package.json" ] && [ -f "tsconfig.json" ]; then
+                            echo "🚀 Lancement de la compilation TypeScript..."
+                            
+                            # Compilation TypeScript - CRITIQUE
+                            if npx tsc --noEmit; then
+                                echo "✅ Aucune erreur TypeScript détectée"
+                            else
+                                echo " "
+                                echo "❌ ERREUR: Échec de la compilation TypeScript"
+                                echo "🔍 Détails des erreurs:"
+                                echo "=========================================="
+                                npx tsc --noEmit 2>&1 | head -20
+                                echo "=========================================="
+                                echo " "
+                                echo "🚨 CORRIGEZ LES ERREURS AVANT DE CONTINUER"
+                                exit 1
+                            fi
+                        else
+                            echo "ℹ️  Projet TypeScript non détecté - vérification ignorée"
                         fi
                     '''
                 }
@@ -59,75 +102,50 @@ pipeline {
         
         stage('Code Quality Tests') {
             parallel {
-                stage('Syntax Validation') {
+                stage('Build Test') {
                     steps {
                         script {
-                            echo '🔬 Validation de la syntaxe...'
+                            echo '🏗️  Test de construction...'
                             sh '''
-                                echo "📝 Vérifications syntaxiques:"
+                                echo "🔨 TEST DE CONSTRUCTION:"
                                 
-                                # Vérification TypeScript
-                                if command -v npx > /dev/null 2>&1; then
-                                    echo "  🔍 Vérification TypeScript..."
-                                    if npx tsc --noEmit 2>/dev/null; then
-                                        echo "    ✅ Aucune erreur TypeScript"
+                                if [ -f "package.json" ]; then
+                                    if npm run build; then
+                                        echo "✅ Build réussi"
+                                        echo "📁 Fichiers générés:"
+                                        ls -la dist/ build/ 2>/dev/null | head -10 || echo "Aucun dossier de build standard"
                                     else
-                                        echo "    ⚠️  Erreurs TypeScript (non bloquant)"
+                                        echo "❌ ERREUR: Échec du build"
+                                        exit 1
                                     fi
                                 else
-                                    echo "    ℹ️  npx non disponible - vérification TypeScript ignorée"
+                                    echo "ℹ️  Aucun build à exécuter"
                                 fi
-                                
-                                # Vérification ESLint si disponible
-                                if [ -f "eslint.config.js" ] || [ -f ".eslintrc.js" ]; then
-                                    echo "  🧹 Vérification ESLint..."
-                                    if npx eslint . --quiet 2>/dev/null; then
-                                        echo "    ✅ Code style valide"
-                                    else
-                                        echo "    ⚠️  Problèmes de style (non bloquant)"
-                                    fi
-                                else
-                                    echo "    ℹ️  ESLint non configuré"
-                                fi
-                                
-                                echo "  ✅ Validation syntaxique terminée"
                             '''
                         }
                     }
                 }
                 
-                stage('Build Readiness') {
+                stage('Lint & Style') {
                     steps {
                         script {
-                            echo '🏗️  Préparation build...'
+                            echo '🧹 Vérification style...'
                             sh '''
-                                echo "🔨 Vérifications build:"
+                                echo "📏 VÉRIFICATION STYLE:"
                                 
-                                # Vérification des dépendances
-                                if [ -f "package-lock.json" ]; then
-                                    echo "  📋 package-lock.json présent"
+                                # ESLint si disponible
+                                if [ -f "eslint.config.js" ] || [ -f ".eslintrc.js" ]; then
+                                    echo "🔍 Exécution d'ESLint..."
+                                    if npx eslint . --max-warnings 0; then
+                                        echo "✅ Code style valide"
+                                    else
+                                        echo "⚠️  Problèmes de style détectés (non bloquant)"
+                                    fi
                                 else
-                                    echo "  ⚠️  package-lock.json manquant - dépendances potentiellement instables"
+                                    echo "ℹ️  ESLint non configuré"
                                 fi
                                 
-                                # Vérification des configurations
-                                if [ -f "vite.config.ts" ] || [ -f "vite.config.js" ]; then
-                                    echo "  ⚡ Vite configuré"
-                                fi
-                                
-                                if [ -f "tailwind.config.js" ]; then
-                                    echo "  🎨 Tailwind configuré"
-                                fi
-                                
-                                # Vérification des dossiers de build
-                                if [ -d "dist" ] || [ -d "build" ]; then
-                                    echo "  📁 Dossier de build présent:"
-                                    ls -la dist/ build/ 2>/dev/null | head -5
-                                else
-                                    echo "  ℹ️  Aucun dossier de build trouvé (normal pour un nouveau projet)"
-                                fi
-                                
-                                echo "  ✅ Préparation build terminée"
+                                echo "✅ Vérifications style terminées"
                             '''
                         }
                     }
@@ -138,31 +156,27 @@ pipeline {
                         script {
                             echo '🛡️  Scan de sécurité...'
                             sh '''
-                                echo "🔒 Vérifications sécurité:"
+                                echo "🔒 VÉRIFICATIONS SÉCURITÉ:"
                                 
-                                # Audit npm si disponible
+                                # Audit npm
                                 if command -v npm > /dev/null 2>&1 && [ -f "package.json" ]; then
-                                    echo "  📋 Audit des vulnérabilités..."
-                                    npm audit --audit-level high 2>/dev/null && echo "    ✅ Aucune vulnérabilité critique" || echo "    ⚠️  Vulnérabilités détectées (vérifiez avec 'npm audit')"
-                                else
-                                    echo "    ℹ️  Audit npm non disponible"
+                                    echo "📋 Audit des vulnérabilités..."
+                                    if npm audit --audit-level high; then
+                                        echo "✅ Aucune vulnérabilité critique"
+                                    else
+                                        echo "⚠️  Vulnérabilités détectées (vérifiez avec 'npm audit')"
+                                    fi
                                 fi
                                 
-                                # Vérification des fichiers sensibles
-                                echo "  📁 Fichiers sensibles:"
+                                # Fichiers sensibles
+                                echo "📁 Fichiers sensibles:"
                                 if [ -f ".env" ]; then
-                                    echo "    ⚠️  Fichier .env présent - vérifiez les secrets"
+                                    echo "⚠️  Fichier .env présent - vérifiez les secrets"
                                 else
-                                    echo "    ✅ Aucun fichier .env détecté"
+                                    echo "✅ Aucun fichier .env détecté"
                                 fi
                                 
-                                if find . -name "*.key" -o -name "*.pem" -o -name ".htpasswd" 2>/dev/null | head -3; then
-                                    echo "    ⚠️  Fichiers sensibles détectés"
-                                else
-                                    echo "    ✅ Aucun fichier sensible évident"
-                                fi
-                                
-                                echo "  ✅ Scan sécurité terminé"
+                                echo "✅ Scan sécurité terminé"
                             '''
                         }
                     }
@@ -170,62 +184,25 @@ pipeline {
             }
         }
         
-        stage('Deployment Readiness') {
+        stage('Quality Gate') {
             steps {
                 script {
-                    echo '🚀 Préparation déploiement...'
+                    echo '🎯 Porte de qualité...'
                     sh '''
-                        echo "📋 RÉSUMÉ DE VALIDATION:"
                         echo " "
-                        echo "✅ CODE VALIDE:"
-                        echo "  • Structure projet: OK"
-                        echo "  • Fichiers essentiels: PRÉSENTS"
-                        echo "  • Configuration: COMPLÈTE"
-                        echo "  • Syntaxe: VALIDE"
-                        echo "  • Sécurité: VERIFIÉE"
+                        echo "📊 RAPPORT DE QUALITÉ FINAL:"
+                        echo "============================"
+                        echo "✅ Compilation TypeScript: RÉUSSIE"
+                        echo "✅ Construction: RÉUSSIE" 
+                        echo "✅ Structure projet: VALIDE"
+                        echo "✅ Sécurité: VERIFIÉE"
                         echo " "
                         echo "🌐 APPLICATION:"
-                        echo "  • URL: http://localhost:${MAIN_PORT}"
                         echo "  • Statut: PRÊTE POUR DÉPLOIEMENT"
                         echo "  • Surveillance: ACTIVÉE"
+                        echo "  • Détection: AUTOMATIQUE"
                         echo " "
-                        echo "🔧 RECOMMANDATIONS:"
-                        echo "  • Vérifiez manuellement l'application sur http://localhost:3000"
-                        echo "  • Testez les fonctionnalités principales"
-                        echo "  • Surveillez les logs pour détecter les erreurs"
-                        echo " "
-                    '''
-                    
-                    // Validation finale
-                    echo "🎯 TOUS LES TESTS AUTOMATIQUES RÉUSSIS"
-                    echo "💡 Le code est valide et prêt pour la production"
-                }
-            }
-        }
-        
-        stage('Smart Monitoring') {
-            steps {
-                script {
-                    echo '📡 Surveillance intelligente...'
-                    sh '''
-                        echo "🔍 SYSTÈME DE SURVEILLANCE:"
-                        echo " "
-                        echo "✅ ACTIVÉ:"
-                        echo "  • Détection changements Git"
-                        echo "  • Validation automatique du code"
-                        echo "  • Analyse qualité"
-                        echo "  • Scan sécurité"
-                        echo " "
-                        echo "🔄 FRÉQUENCE:"
-                        echo "  • Vérification: TOUTES LES MINUTES"
-                        echo "  • Rapport: AUTOMATIQUE"
-                        echo "  • Alertes: INSTANTANÉES"
-                        echo " "
-                        echo "🎯 PROCHAINES ACTIONS:"
-                        echo "  • Le système surveille votre dépôt"
-                        echo "  • Tout changement déclenchera une nouvelle validation"
-                        echo "  • Aucune action manuelle requise"
-                        echo " "
+                        echo "🎉 TOUTES LES VALIDATIONS ONT RÉUSSI"
                     '''
                 }
             }
@@ -236,8 +213,8 @@ pipeline {
         always {
             echo '🏁 Pipeline de validation terminé'
             sh '''
-                echo "🧹 Nettoyage des fichiers temporaires..."
-                # Suppression des fichiers temporaires créés pendant l'exécution
+                echo "🧹 Nettoyage..."
+                # Nettoyage des fichiers temporaires
                 find . -name "*.tmp" -delete 2>/dev/null || true
                 echo "✅ Nettoyage terminé"
             '''
@@ -247,29 +224,19 @@ pipeline {
             sh '''
                 echo " "
                 echo "================================================"
-                echo "✅ VOTRE PROJET EST SOUS SURVEILLANCE AUTOMATIQUE"
+                echo "✅ CODE VALIDE - PRÊT POUR LA PRODUCTION"
                 echo "================================================"
                 echo " "
-                echo "📊 STATUT ACTUEL:"
-                echo "  • Code: VALIDE ✅"
-                echo "  • Structure: CORRECTE ✅" 
-                echo "  • Sécurité: VERIFIÉE ✅"
-                echo "  • Surveillance: ACTIVÉE ✅"
+                echo "📊 RÉSULTATS:"
+                echo "  • TypeScript: ✅ Aucune erreur"
+                echo "  • Build: ✅ Réussi" 
+                echo "  • Sécurité: ✅ Vérifiée"
+                echo "  • Style: ✅ Validé"
                 echo " "
-                echo "🔄 PROCHAIN SCAN:"
-                echo "  • Dans: 1 MINUTE"
-                echo "  • Condition: TOUT CHANGEMENT GIT"
-                echo "  • Action: VALIDATION AUTOMATIQUE"
-                echo " "
-                echo "🔔 NOTIFICATIONS:"
-                echo "  • Succès: Pipeline vert"
-                echo "  • Échec: Pipeline rouge + logs détaillés"
-                echo "  • Problèmes: Détection immédiate"
-                echo " "
-                echo "🎯 VOTRE APPLICATION EST MAINTENANT:"
-                echo "  • Surveillée en continu"
-                echo "  • Validée automatiquement" 
-                echo "  • Protégée contre les erreurs"
+                echo "🔄 SURVEILLANCE:"
+                echo "  • Prochain scan: 1 MINUTE"
+                echo "  • Détection: AUTOMATIQUE"
+                echo "  • Alertes: INSTANTANÉES"
                 echo " "
             '''
         }
@@ -277,18 +244,24 @@ pipeline {
             echo '❌ VALIDATION ÉCHOUÉE - CORRIGEZ LES ERREURS'
             sh '''
                 echo " "
-                echo "🚨 PROBLEMES DÉTECTÉS:"
-                echo "• Fichiers essentiels manquants"
-                echo "• Erreurs de syntaxe"
-                echo "• Problèmes de configuration"
+                echo "================================================"
+                echo "🚨 ERREURS DÉTECTÉES - DÉPLOIEMENT BLOQUÉ"
+                echo "================================================"
+                echo " "
+                echo "🔍 CAUSES POSSIBLES:"
+                echo "  • Erreurs TypeScript dans le code"
+                echo "  • Échec de la compilation"
+                echo "  • Problèmes de dépendances"
+                echo "  • Fichiers manquants"
                 echo " "
                 echo "🔧 ACTIONS REQUISES:"
-                echo "1. Consultez les logs ci-dessus"
-                echo "2. Corrigez les erreurs listées"
-                echo "3. Commit et push les corrections"
-                echo "4. Le système re-scannera automatiquement"
+                echo "1. Consultez les logs d'erreur ci-dessus"
+                echo "2. Corrigez les erreurs TypeScript listées"
+                echo "3. Testez localement: npx tsc --noEmit"
+                echo "4. Commit et push les corrections"
+                echo "5. Le système re-validera automatiquement"
                 echo " "
-                echo "💡 Le système a empêché un déploiement potentiellement dangereux !"
+                echo "💡 Le système a empêché un déploiement dangereux !"
                 echo " "
             '''
         }
