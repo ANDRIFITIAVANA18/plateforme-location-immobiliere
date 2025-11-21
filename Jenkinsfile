@@ -1,53 +1,40 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:18-alpine'
-            args '-u root'
-        }
-    }
+    agent any
     
     stages {
-        stage('Install') {
+        stage('🔍 Analyse') {
             steps {
                 sh '''
-                    echo "📦 Installation..."
-                    npm install
+                    echo "🔍 Détection projet..."
+                    if [ -f "package.json" ]; then
+                        echo "📦 $(grep '"name"' package.json | head -1)"
+                    fi
                 '''
             }
         }
         
-        stage('Build') {
+        stage('🏗️ Build') {
             steps {
                 sh '''
-                    echo "🏗️ Construction..."
-                    npm run build
-                    echo "✅ Build réussi !"
-                    ls -la dist/
+                    echo "🔨 Construction..."
+                    docker run --rm -v `pwd`:/app -w /app node:18-alpine sh -c "
+                        npm install
+                        npm run build
+                        echo '✅ Build réussi!'
+                    "
                 '''
             }
         }
         
-        stage('Préparation Docker') {
+        stage('🐳 Docker') {
             steps {
                 sh '''
-                    echo "🐳 Installation de Docker dans le conteneur..."
-                    apk update && apk add --no-cache docker
-                    echo "✅ Docker installé"
-                '''
-            }
-        }
-        
-        stage('Docker Build') {
-            steps {
-                sh '''
-                    echo "📦 Création image Docker..."
+                    echo "📦 Création image..."
                     echo "FROM nginx:alpine" > Dockerfile
                     echo "COPY dist/ /usr/share/nginx/html" >> Dockerfile
                     echo "EXPOSE 80" >> Dockerfile
-                    echo "CMD [\"nginx\", \"-g\", \"daemon off;\"]" >> Dockerfile
-                    
                     docker build -t app:${BUILD_NUMBER} .
-                    echo "✅ Image Docker créée: app:${BUILD_NUMBER}"
+                    echo "✅ Image: app:${BUILD_NUMBER}"
                 '''
             }
         }
@@ -55,9 +42,7 @@ pipeline {
     
     post {
         success {
-            echo "🎉 SUCCÈS COMPLET !"
-            echo "🐳 Image: app:${BUILD_NUMBER}"
-            echo "🚀 Pour déployer: docker run -p 3000:80 app:${BUILD_NUMBER}"
+            echo "🎉 RÉUSSI !"
         }
     }
 }
