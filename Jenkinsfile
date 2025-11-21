@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     triggers {
-        pollSCM('H/1 * * * *')  // ✅ Vérifie Git toutes les 2 minutes
+        pollSCM('H/1 * * * *')
     }
     
     environment {
@@ -23,7 +23,6 @@ pipeline {
                     echo "📅 Date: \$(git log -1 --pretty=format:'%cd')"
                     echo "🔀 Branche: \$(git branch --show-current)"
                     
-                    # Détection des changements
                     echo "🔄 Derniers changements détectés:"
                     git log --oneline -5
                     
@@ -125,10 +124,11 @@ pipeline {
         stage('🐳 Dockerisation') {
             steps {
                 sh """
-                    echo "FROM nginx:alpine" > Dockerfile
-                    echo "COPY dist/ /usr/share/nginx/html" >> Dockerfile
-                    echo "EXPOSE 80" >> Dockerfile
-                    echo "CMD [\"nginx\", \"-g\", \"daemon off;\"]" >> Dockerfile
+                    # Création du Dockerfile avec echo simple
+                    echo 'FROM nginx:alpine' > Dockerfile
+                    echo 'COPY dist/ /usr/share/nginx/html' >> Dockerfile
+                    echo 'EXPOSE 80' >> Dockerfile
+                    echo 'CMD [\"nginx\", \"-g\", \"daemon off;\"]' >> Dockerfile
                     
                     docker build -t plateforme-location:\${BUILD_NUMBER} .
                     echo "✅ Image Docker créée: plateforme-location:\${BUILD_NUMBER}"
@@ -140,17 +140,7 @@ pipeline {
     post {
         success {
             echo "🎉 DÉPLOIEMENT AUTOMATIQUE RÉUSSI !"
-            echo "📋 RAPPORT:"
-            echo "• ✅ Détection auto Git activée"
-            echo "• ✅ Tests automatisés" 
-            echo "• ✅ Validation qualité"
-            echo "• ✅ Analyse sécurité"
-            echo "• ✅ Build production"
-            echo "• ✅ Image Docker"
-            echo ""
-            echo "🚀 COMMANDE DE DÉPLOIEMENT:"
-            echo "docker run -d -p 3000:80 plateforme-location:\${BUILD_NUMBER}"
-            echo "🌐 VOTRE APP: http://localhost:3000"
+            echo "🚀 COMMANDE: docker run -d -p 3000:80 plateforme-location:\${BUILD_NUMBER}"
         }
     }
 }
