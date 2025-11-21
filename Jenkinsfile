@@ -48,38 +48,90 @@ pipeline {
                         echo "=================================="
                         
                         ERROR_COUNT=0
+                        FILES_WITH_ERRORS=""
                         
-                        # Recherche d'erreurs TypeScript réelles (exclut node_modules)
                         echo "🔍 Analyse des fichiers source TypeScript..."
                         
-                        # Pattern 1: Assignation incorrecte number -> string dans VOTRE code
-                        if grep -r "const.:.*string.=.[0-9]" --include=".ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null; then
-                            echo "❌ ERREUR: Assignation number -> string détectée dans votre code"
+                        # Méthode 1: Recherche directe des patterns d'erreur
+                        echo " "
+                        echo "🔎 Méthode 1: Recherche par patterns..."
+                        
+                        # Pattern string = number
+                        if find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*string.*=.*[0-9]" {} \\; 2>/dev/null | grep -q "."; then
+                            echo "❌ ERREUR: Assignation number -> string détectée"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
+                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation string = number dans:"
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*string.*=.*[0-9]" {} \\; 2>/dev/null >> temp_errors.txt || true
+                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS$(cat temp_errors.txt)"
                         fi
                         
-                        # Pattern 2: Assignation incorrecte string -> number dans VOTRE code
-                        if grep -r "const.:.*number.=.['\\"]" --include=".ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null; then
-                            echo "❌ ERREUR: Assignation string -> number détectée dans votre code"
+                        # Pattern number = string  
+                        if find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*number.*=.*['\\"]" {} \\; 2>/dev/null | grep -q "."; then
+                            echo "❌ ERREUR: Assignation string -> number détectée"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
+                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation number = string dans:"
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*number.*=.*['\\"]" {} \\; 2>/dev/null >> temp_errors.txt || true
+                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS$(cat temp_errors.txt)"
                         fi
                         
-                        # Pattern 3: Fichiers de test avec erreurs intentionnelles
-                        if find . -name ".ts" -name ".tsx" ! -path "./node_modules/*" -exec grep -l "testError" {} \\; 2>/dev/null | grep -q "."; then
-                            echo "❌ ERREUR: Fichiers de test avec erreurs détectés"
-                            ERROR_COUNT=$((ERROR_COUNT + 1))
+                        # Méthode 2: Vérification spécifique des fichiers de test
+                        echo " "
+                        echo "🔎 Méthode 2: Vérification fichiers spécifiques..."
+                        
+                        if [ -f "test-validation-securise.ts" ]; then
+                            echo "📄 Analyse de test-validation-securise.ts..."
+                            if grep -q "const.*string.*=.*123" test-validation-securise.ts; then
+                                echo "❌ ERREUR: test-validation-securise.ts contient 'const.*string.*=.*123'"
+                                ERROR_COUNT=$((ERROR_COUNT + 1))
+                                FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- test-validation-securise.ts (string = 123)"
+                            fi
                         fi
                         
+                        if [ -f "test-error.ts" ]; then
+                            echo "📄 Analyse de test-error.ts..."
+                            if grep -q "const.*number.*=.*'hello'" test-error.ts; then
+                                echo "❌ ERREUR: test-error.ts contient 'const.*number.*=.*'hello''"
+                                ERROR_COUNT=$((ERROR_COUNT + 1))
+                                FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- test-error.ts (number = 'hello')"
+                            fi
+                        fi
+                        
+                        # Méthode 3: Compilation TypeScript réelle (si tsc disponible)
+                        echo " "
+                        echo "🔎 Méthode 3: Compilation TypeScript..."
+                        if [ -f "node_modules/.bin/tsc" ] || command -v npx &> /dev/null; then
+                            echo "🛠️  Exécution de la compilation TypeScript..."
+                            npx tsc --noEmit --skipLibCheck 2> ts_errors.txt || true
+                            
+                            if [ -s "ts_errors.txt" ]; then
+                                echo "❌ ERREURS DE COMPILATION TypeScript:"
+                                cat ts_errors.txt
+                                ERROR_COUNT=$((ERROR_COUNT + 1))
+                                FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Erreurs de compilation TypeScript (voir logs)"
+                            else
+                                echo "✅ Aucune erreur de compilation TypeScript"
+                            fi
+                            rm -f ts_errors.txt
+                        else
+                            echo "⚠️  TypeScript compiler non disponible, skip compilation check"
+                        fi
+                        
+                        # Nettoyage
+                        rm -f temp_errors.txt
+                        
+                        # Résultat final
+                        echo " "
                         if [ $ERROR_COUNT -eq 0 ]; then
                             echo "✅ Aucune erreur TypeScript détectée dans votre code source"
                             echo "✅ Validation TypeScript réussie"
                         else
-                            echo "🚨 $ERROR_COUNT erreur(s) TypeScript détectée(s)"
+                            echo "🚨 $ERROR_COUNT type(s) d'erreur(s) TypeScript détectée(s)"
                             echo " "
-                            echo "🔍 Fichiers problématiques:"
-                            grep -r "const.:.*string.=.[0-9]" --include=".ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null || true
-                            grep -r "const.:.*number.=.['\\"]" --include=".ts" --include="*.tsx" . --exclude-dir=node_modules 2>/dev/null || true
-                            find . -name ".ts" -name ".tsx" ! -path "./node_modules/*" -exec grep -l "testError" {} \\; 2>/dev/null || true
+                            echo "📁 Fichiers/Erreurs problématiques:$FILES_WITH_ERRORS"
+                            echo " "
+                            echo "🔍 Détails des erreurs:"
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -H "const.*string.*=.*[0-9]" {} \\; 2>/dev/null || true
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -H "const.*number.*=.*['\\"]" {} \\; 2>/dev/null || true
                             echo " "
                             echo "💡 CORRIGEZ LES ERREURS AVANT DE CONTINUER"
                             exit 1
@@ -87,7 +139,7 @@ pipeline {
                         
                         echo " "
                         echo "📁 Fichiers TypeScript analysés:"
-                        find . -name ".ts" -o -name ".tsx" ! -path "./node_modules/*" | head -10
+                        find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" | head -10
                     '''
                 }
             }
@@ -164,6 +216,7 @@ pipeline {
                 echo "• Assignations de types incorrectes"
                 echo "• Fichiers avec patterns d'erreur"
                 echo "• Fichiers de test avec erreurs"
+                echo "• Erreurs de compilation TypeScript"
                 echo " "
                 echo "💡 ACTIONS REQUISES:"
                 echo "1. Vérifiez les fichiers listés ci-dessus"
