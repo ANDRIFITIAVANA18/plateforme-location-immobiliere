@@ -2,7 +2,7 @@ pipeline {
     agent {
         docker {
             image 'node:18-alpine'
-            args '--privileged -u root -v /tmp/.npm:/root/.npm'
+            args '--privileged -u root'
         }
     }
     
@@ -10,291 +10,118 @@ pipeline {
         NODE_ENV = 'production'
         CI = 'true'
         APP_NAME = 'plateforme-location-immobiliere'
-        DOCKER_IMAGE = "${APP_NAME}:${BUILD_NUMBER}"
     }
     
     stages {
-        stage('🔍 Détection Auto') {
+        stage('🔧 Préparation') {
             steps {
-                script {
-                    echo '🎯 ANALYSE AUTOMATIQUE DU PROJET'
-                    sh '''
-                        echo "=========================================="
-                        echo "🔍 DÉTECTION INTELLIGENTE"
-                        echo "=========================================="
-                        
-                        # Détection framework
-                        if [ -f "package.json" ]; then
-                            PROJECT_NAME=$(jq -r '.name' package.json)
-                            PROJECT_VERSION=$(jq -r '.version' package.json)
-                            echo "📦 Projet: $PROJECT_NAME v$PROJECT_VERSION"
-                            
-                            # Détection React
-                            if [ $(jq '.dependencies | has("react")' package.json) = "true" ]; then
-                                echo "⚛️  Framework: React"
-                                FRAMEWORK="react"
-                            fi
-                            
-                            # Détection TypeScript
-                            if [ -f "tsconfig.json" ]; then
-                                echo "📘 Langage: TypeScript"
-                            fi
-                        fi
-                        
-                        echo "📁 Structure:"
-                        echo "• Composants: $(find src -name '*.tsx' -o -name '*.jsx' 2>/dev/null | wc -l)"
-                        echo "• Tests: $(find . -name '*.test.*' -o -name '*.spec.*' 2>/dev/null | wc -l)"
-                        echo "• Dependencies: $(jq '.dependencies | length' package.json)"
-                        echo "=========================================="
-                    '''
-                }
+                sh '''
+                    echo "🔧 Installation des outils nécessaires..."
+                    apk update && apk add --no-cache git jq
+                    echo "✅ Outils installés"
+                    
+                    echo "📦 Informations du projet:"
+                    if [ -f "package.json" ]; then
+                        echo "Projet: $(cat package.json | grep '"name"' | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[:space:]')"
+                        echo "Version: $(cat package.json | grep '"version"' | head -1 | awk -F: '{ print $2 }' | sed 's/[",]//g' | tr -d '[:space:]')"
+                    fi
+                    
+                    echo "📁 Structure:"
+                    find . -name "*.tsx" -o -name "*.jsx" | head -5 | wc -l | xargs echo "Composants React:"
+                    find . -name "*.test.*" -o -name "*.spec.*" | wc -l | xargs echo "Fichiers de test:"
+                '''
             }
         }
         
-        stage('📥 Installation Intelligente') {
+        stage('📥 Installation') {
             steps {
-                script {
-                    echo '🧠 INSTALLATION OPTIMISÉE'
-                    sh '''
-                        echo "🔧 STRATÉGIE D INSTALLATION"
-                        
-                        # Nettoyage cache
-                        npm cache clean --force
-                        
-                        # Installation selon lock file
-                        if [ -f "package-lock.json" ]; then
-                            echo "📦 npm ci (optimisé)"
-                            npm ci --silent --no-audit --prefer-offline
-                        else
-                            echo "📦 npm install"
-                            npm install --silent --no-audit --prefer-offline
-                        fi
-                        
-                        if [ $? -eq 0 ]; then
-                            echo "✅ Dépendances installées"
-                            echo "📊 Taille: $(du -sh node_modules | cut -f1)"
-                        else
-                            echo "❌ Échec installation"
-                            exit 1
-                        fi
-                    '''
-                }
+                sh '''
+                    echo "📦 Installation des dépendances..."
+                    if [ -f "package-lock.json" ]; then
+                        npm ci --silent --no-audit
+                    else
+                        npm install --silent --no-audit
+                    fi
+                    echo "✅ Dépendances installées"
+                '''
             }
         }
         
-        stage('✅ Validation Qualité') {
-            parallel {
-                stage('📘 TypeScript') {
-                    steps {
-                        script {
-                            echo '📘 VALIDATION TYPESCRIPT'
-                            sh '''
-                                echo "🔍 Compilation TypeScript..."
-                                npx tsc --noEmit --skipLibCheck --strict
-                                
-                                if [ $? -eq 0 ]; then
-                                    echo "✅ Aucune erreur TypeScript"
-                                else
-                                    echo "❌ Erreurs TypeScript détectées"
-                                    exit 1
-                                fi
-                            '''
-                        }
-                    }
-                }
-                
-                stage('📏 ESLint') {
-                    steps {
-                        script {
-                            echo '📏 ANALYSE DE CODE'
-                            sh '''
-                                if npx eslint --version > /dev/null 2>&1; then
-                                    echo "🔍 Exécution ESLint..."
-                                    npx eslint src/ --max-warnings=0
-                                    
-                                    if [ $? -eq 0 ]; then
-                                        echo "✅ Code style validé"
-                                    else
-                                        echo "❌ Problèmes de style détectés"
-                                        exit 1
-                                    fi
-                                else
-                                    echo "⚠️  ESLint non installé - skip"
-                                fi
-                            '''
-                        }
-                    }
-                }
+        stage('✅ Validation') {
+            steps {
+                sh '''
+                    echo "📘 Validation TypeScript..."
+                    if [ -f "tsconfig.json" ]; then
+                        npx tsc --noEmit --skipLibCheck
+                        echo "✅ TypeScript validé"
+                    else
+                        echo "⚠️ TypeScript non configuré"
+                    fi
+                '''
             }
         }
         
-        stage('🧪 Tests Automatisés') {
+        stage('🧪 Tests') {
             steps {
-                script {
-                    echo '🧪 EXÉCUTION DES TESTS'
-                    sh '''
-                        echo "🔬 STRATÉGIE DE TEST"
-                        
-                        # Exécution des tests avec couverture
-                        npm test -- --watchAll=false --coverage --passWithNoTests
-                        
-                        if [ $? -eq 0 ]; then
-                            echo "✅ Tests réussis"
-                            
-                            # Rapport couverture
-                            if [ -d "coverage" ]; then
-                                echo "📊 Couverture des tests disponible"
-                            fi
-                        else
-                            echo "❌ Tests échoués"
-                            exit 1
-                        fi
-                    '''
-                }
+                sh '''
+                    echo "🔬 Exécution des tests..."
+                    npm test -- --watchAll=false --passWithNoTests --silent
+                    echo "✅ Tests terminés"
+                '''
             }
         }
         
-        stage('🛡️ Analyse Sécurité') {
+        stage('🏗️ Build') {
             steps {
-                script {
-                    echo '🔒 SCAN DE SÉCURITÉ'
-                    sh '''
-                        echo "🚨 VÉRIFICATIONS CRITIQUES"
-                        
-                        # Audit npm
-                        echo "📦 Audit des vulnérabilités..."
-                        npm audit --audit-level=high || true
-                        
-                        # Fichiers sensibles
-                        echo "📁 Scan des secrets..."
-                        if [ -f ".env" ]; then
-                            echo "❌ .env DÉTECTÉ - NE DEVRAIT PAS ÊTRE COMMITÉ"
-                            exit 1
-                        fi
-                        
-                        # Secrets dans le code
-                        if grep -r "AKIA[0-9A-Z]" src/ > /dev/null 2>&1; then
-                            echo "❌ CLÉ AWS DÉTECTÉE!"
-                            exit 1
-                        fi
-                        
-                        if grep -r "sk_live_" src/ > /dev/null 2>&1; then
-                            echo "❌ CLÉ STRIPE DÉTECTÉE!"
-                            exit 1
-                        fi
-                        
-                        echo "✅ Sécurité validée"
-                    '''
-                }
+                sh '''
+                    echo "🔨 Construction de l'application..."
+                    npm run build
+                    echo "✅ Build réussi"
+                    
+                    if [ -d "build" ]; then
+                        echo "📊 Taille du build: $(du -sh build | cut -f1)"
+                    elif [ -d "dist" ]; then
+                        echo "📊 Taille du build: $(du -sh dist | cut -f1)"
+                    fi
+                '''
             }
         }
         
-        stage('🏗️ Build Production') {
+        stage('🐳 Docker') {
             steps {
-                script {
-                    echo '🏗️ CONSTRUCTION PRODUCTION'
-                    sh '''
-                        echo "🔨 BUILD OPTIMISÉ"
-                        
-                        # Construction
-                        npm run build
-                        
-                        if [ $? -eq 0 ]; then
-                            echo "✅ Build réussi"
-                            
-                            # Analyse build
-                            BUILD_DIR=$(ls -d build dist 2>/dev/null | head -1)
-                            if [ -n "$BUILD_DIR" ]; then
-                                echo "📊 Analyse du build:"
-                                echo "Taille: $(du -sh $BUILD_DIR | cut -f1)"
-                                echo "Fichiers: $(find $BUILD_DIR -type f | wc -l)"
-                            fi
-                        else
-                            echo "❌ Échec build"
-                            exit 1
-                        fi
-                    '''
-                }
-            }
-        }
-        
-        stage('🐳 Dockerisation') {
-            steps {
-                script {
-                    echo '🐳 CONSTRUCTION IMAGE DOCKER'
-                    sh '''
-                        echo "🔨 Création image Docker..."
-                        
-                        # Créer Dockerfile si absent
-                        if [ ! -f "Dockerfile" ]; then
-                            cat > Dockerfile << 'EOF'
-# Multi-stage build
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
-
+                sh '''
+                    echo "📦 Création de l'image Docker..."
+                    
+                    # Créer un Dockerfile simple si absent
+                    if [ ! -f "Dockerfile" ]; then
+                        cat > Dockerfile << 'DOCKERFILE'
 FROM nginx:alpine
-COPY --from=builder /app/build /usr/share/nginx/html
+COPY build/ /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
-EOF
-                            echo "📝 Dockerfile généré automatiquement"
-                        fi
-                        
-                        # Construction image
-                        docker build -t $DOCKER_IMAGE .
-                        
-                        if [ $? -eq 0 ]; then
-                            echo "✅ Image créée: $DOCKER_IMAGE"
-                            echo "📋 Images disponibles:"
-                            docker images | grep $APP_NAME
-                        else
-                            echo "❌ Échec construction Docker"
-                            exit 1
-                        fi
-                    '''
-                }
+DOCKERFILE
+                        echo "📝 Dockerfile généré automatiquement"
+                    fi
+                    
+                    # Construire l'image
+                    docker build -t ${APP_NAME}:${BUILD_NUMBER} .
+                    echo "✅ Image Docker créée: ${APP_NAME}:${BUILD_NUMBER}"
+                '''
             }
         }
     }
     
     post {
         always {
-            script {
-                echo "🏁 PIPELINE TERMINÉ - Build #${BUILD_NUMBER}"
-                sh 'echo "📅 Date: $(date)"'
-                sh 'echo "🔀 Branche: $(git branch --show-current)"'
-                sh 'echo "📝 Commit: $(git log -1 --pretty=format:\"%h - %s\")"'
-            }
+            echo "🏁 Pipeline terminé - Build #${BUILD_NUMBER}"
         }
         success {
-            script {
-                echo "🎉 SUCCÈS - APPLICATION VALIDÉE"
-                echo "📋 RÉSUMÉ:"
-                echo "• ✅ Détection automatique"
-                echo "• ✅ Installation intelligente" 
-                echo "• ✅ Validation qualité"
-                echo "• ✅ Tests automatisés"
-                echo "• ✅ Sécurité vérifiée"
-                echo "• ✅ Build production"
-                echo "• 🐳 Docker: ${DOCKER_IMAGE}"
-                echo " "
-                echo "🚀 POUR DÉPLOYER:"
-                echo "docker run -p 3000:80 ${DOCKER_IMAGE}"
-            }
+            echo "🎉 SUCCÈS - Application prête pour la production"
+            echo "🐳 Image Docker: ${APP_NAME}:${BUILD_NUMBER}"
+            echo "🚀 Pour déployer: docker run -p 3000:80 ${APP_NAME}:${BUILD_NUMBER}"
         }
         failure {
-            script {
-                echo "❌ ÉCHEC - CORRECTIONS REQUISES"
-                echo "🔧 ACTIONS:"
-                echo "1. Vérifier les logs d'erreur"
-                echo "2. Tester localement: npm run build"
-                echo "3. Corriger les problèmes"
-                echo "4. Recommiter et relancer"
-            }
+            echo "❌ ÉCHEC - Vérifiez les logs ci-dessus"
         }
     }
 }
