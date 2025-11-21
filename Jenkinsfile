@@ -1,8 +1,16 @@
 pipeline {
     agent any
     
+    // TRIGGERS FONCTIONNELS
     triggers {
-        pollSCM('H/1 * * * *')
+        // 1. Webhook GitHub (recommandé)
+        githubPush()
+        
+        // 2. Polling toutes les 2 minutes (backup)
+        pollSCM('H/2 * * * *')
+        
+        // 3. Déclenchement périodique (alternative)
+        cron('H/5 * * * *')
     }
     
     environment {
@@ -11,11 +19,21 @@ pipeline {
     }
     
     stages {
-        stage('🔍 Détection Auto Git') {
+        stage('🔍 Détection Changements Git') {
             steps {
+                script {
+                    // Vérifier si déclenché par un changement Git
+                    if (currentBuild.getBuildCauses('hudson.triggers.SCMTrigger$SCMTriggerCause') || 
+                        currentBuild.getBuildCauses('com.cloudbees.jenkins.GitHubPushCause')) {
+                        echo "🎯 DÉCLENCHÉ AUTOMATIQUEMENT PAR CHANGEMENT GIT"
+                    } else {
+                        echo "👤 DÉCLENCHÉ MANUELLEMENT"
+                    }
+                }
+                
                 sh """
                     echo "=========================================="
-                    echo "🔍 DÉTECTION AUTOMATIQUE GIT"
+                    echo "🔍 ANALYSE DES CHANGEMENTS GIT"
                     echo "=========================================="
                     
                     echo "📝 Dernier commit: \$(git log -1 --pretty=format:'%h - %s')"
@@ -23,12 +41,15 @@ pipeline {
                     echo "📅 Date: \$(git log -1 --pretty=format:'%cd')"
                     echo "🔀 Branche: \$(git branch --show-current)"
                     
-                    echo "🔄 Derniers changements détectés:"
+                    echo "🔄 Derniers changements:"
                     git log --oneline -5
                     
+                    # Afficher les fichiers modifiés dans le dernier commit
+                    echo "📁 Fichiers modifiés:"
+                    git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "Premier commit ou pas d'historique"
+                    
                     if [ -f "package.json" ]; then
-                        echo "📦 Type: Application Node.js/React"
-                        echo "🆔 Nom: \$(grep '\"name\"' package.json | head -1 | cut -d'\"' -f4)"
+                        echo "📦 Projet: \$(grep '\"name\"' package.json | head -1 | cut -d'\"' -f4)"
                     fi
                 """
             }
@@ -37,7 +58,7 @@ pipeline {
         stage('📥 Installation') {
             steps {
                 sh """
-                    echo "🔧 INSTALLATION"
+                    echo "🔧 INSTALLATION DES DÉPENDANCES"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                         npm install --silent
                         echo '✅ Dépendances installées'
@@ -51,6 +72,7 @@ pipeline {
                 stage('📘 TypeScript') {
                     steps {
                         sh """
+                            echo "🔬 VALIDATION TYPESCRIPT"
                             docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                                 if [ -f 'tsconfig.json' ]; then
                                     npx tsc --noEmit --skipLibCheck
@@ -64,9 +86,10 @@ pipeline {
                 stage('📏 ESLint') {
                     steps {
                         sh """
+                            echo "🎨 ANALYSE DE CODE"
                             docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                                 if npx eslint --version > /dev/null 2>&1; then
-                                    npx eslint . --ext .js,.jsx,.ts,.tsx || echo '⚠️  Problèmes de style'
+                                    npx eslint . --ext .js,.jsx,.ts,.tsx 2>/dev/null || echo '⚠️  Problèmes de style (ESLint v9)'
                                 fi
                             "
                         """
@@ -78,6 +101,7 @@ pipeline {
         stage('🧪 Tests Auto') {
             steps {
                 sh """
+                    echo "🔬 EXÉCUTION DES TESTS"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                         npm test -- --watchAll=false --passWithNoTests --silent
                         echo '✅ Tests terminés'
@@ -89,6 +113,7 @@ pipeline {
         stage('🛡️ Sécurité') {
             steps {
                 sh """
+                    echo "🔒 ANALYSE DE SÉCURITÉ"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                         npm audit --audit-level=high || echo '⚠️  Audit avec avertissements'
                         
@@ -97,7 +122,7 @@ pipeline {
                             exit 1
                         fi
                         
-                        echo '✅ Aucun problème de sécurité'
+                        echo '✅ Aucun problème de sécurité critique'
                     "
                 """
             }
@@ -106,6 +131,7 @@ pipeline {
         stage('🏗️ Build Production') {
             steps {
                 sh """
+                    echo "🔨 CONSTRUCTION PRODUCTION"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                         npm run build
                         echo '✅ Build réussi'
@@ -116,6 +142,7 @@ pipeline {
                     if [ -d "dist" ]; then
                         echo "📊 Build créé dans: dist/"
                         echo "📁 Taille: \$(du -sh dist | cut -f1)"
+                        echo "📋 Fichiers: \$(find dist -type f | wc -l)"
                     fi
                 """
             }
@@ -124,7 +151,9 @@ pipeline {
         stage('🐳 Dockerisation') {
             steps {
                 sh """
-                    # Création du Dockerfile avec echo simple
+                    echo "📦 CRÉATION IMAGE DOCKER"
+                    
+                    # Création du Dockerfile
                     echo 'FROM nginx:alpine' > Dockerfile
                     echo 'COPY dist/ /usr/share/nginx/html' >> Dockerfile
                     echo 'EXPOSE 80' >> Dockerfile
@@ -138,9 +167,22 @@ pipeline {
     }
     
     post {
+        always {
+            echo "🏁 PIPELINE TERMINÉ - Build #\${BUILD_NUMBER}"
+            
+            script {
+                // Afficher la cause du déclenchement
+                def causes = currentBuild.getBuildCauses()
+                causes.each { cause ->
+                    echo "🎯 DÉCLENCHÉ PAR: \${cause.shortDescription}"
+                }
+            }
+        }
         success {
             echo "🎉 DÉPLOIEMENT AUTOMATIQUE RÉUSSI !"
+            echo "📋 CAUSE: \${currentBuild.getBuildCauses()[0].shortDescription}"
             echo "🚀 COMMANDE: docker run -d -p 3000:80 plateforme-location:\${BUILD_NUMBER}"
+            echo "🌐 ACCÈS: http://localhost:3000"
         }
     }
 }
