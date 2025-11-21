@@ -60,16 +60,18 @@ pipeline {
                         if find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*string.*=.*[0-9]" {} \\; 2>/dev/null | grep -q "."; then
                             echo "❌ ERREUR: Assignation number -> string détectée"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
-                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation string = number dans:"
-                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*string.*=.*[0-9]" {} \\; 2>/dev/null | head -5
+                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation string = number"
+                            echo "Fichiers concernés:"
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*string.*=.*[0-9]" {} \\; 2>/dev/null | head -3
                         fi
                         
                         # Pattern number = string  
                         if find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*number.*=.*['\\"]" {} \\; 2>/dev/null | grep -q "."; then
                             echo "❌ ERREUR: Assignation string -> number détectée"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
-                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation number = string dans:"
-                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*number.*=.*['\\"]" {} \\; 2>/dev/null | head -5
+                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation number = string"
+                            echo "Fichiers concernés:"
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*number.*=.*['\\"]" {} \\; 2>/dev/null | head -3
                         fi
                         
                         # Méthode 2: Vérification fichiers de test
@@ -86,12 +88,13 @@ pipeline {
                             fi
                         done
                         
-                        # Méthode 3: Compilation TypeScript (SEULEMENT si disponible)
+                        # Méthode 3: Compilation TypeScript - TEST RÉEL de disponibilité
                         echo " "
                         echo "🔎 Méthode 3: Vérification compilation TypeScript..."
                         
-                        # Vérification RÉELLE de la disponibilité de npx
-                        if which npx >/dev/null 2>&1 || [ -f "node_modules/.bin/tsc" ]; then
+                        # TEST RÉEL - Essayer d'exécuter npx pour voir si ça échoue
+                        echo "🧪 Test de disponibilité de npx..."
+                        if npx --version >/dev/null 2>&1; then
                             echo "🛠️  npx disponible - Exécution de la compilation TypeScript..."
                             npx tsc --noEmit --skipLibCheck 2> ts_errors.txt || true
                             
@@ -100,13 +103,13 @@ pipeline {
                                 ERROR_COUNT=$((ERROR_COUNT + 1))
                                 FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Erreurs de compilation TypeScript"
                                 echo "Premières erreurs:"
-                                cat ts_errors.txt | head -5
+                                cat ts_errors.txt | head -3
                             else
                                 echo "✅ Aucune erreur de compilation TypeScript"
                             fi
                             rm -f ts_errors.txt 2>/dev/null || true
                         else
-                            echo "✅ Compilation TypeScript ignorée (npx non disponible)"
+                            echo "✅ npx non disponible - Ignorer la compilation TypeScript"
                             echo "ℹ️  Pour une vérification complète, installez Node.js sur Jenkins"
                         fi
                         
@@ -128,7 +131,7 @@ pipeline {
                         
                         echo " "
                         echo "📁 Fichiers TypeScript analysés:"
-                        find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" | head -10
+                        find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" | head -5
                     '''
                 }
             }
