@@ -178,6 +178,39 @@ pipeline {
         }
     }
 }
+
+// AJOUTEZ CE STAGE AU DÉBUT DE VOTRE JENKINSFILE
+stage('Setup Environment') {
+    steps {
+        script {
+            echo '🔧 Configuration de l environnement Node.js...'
+            sh '''
+                echo "📦 Vérification de Node.js..."
+                
+                if ! command -v node >/dev/null 2>&1; then
+                    echo "🚀 Installation de Node.js..."
+                    
+                    # Installation automatique
+                    if command -v apt-get >/dev/null 2>&1; then
+                        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+                        apt-get install -y nodejs
+                        echo "✅ Node.js installé"
+                    else
+                        echo "❌ Impossible d'installer Node.js automatiquement"
+                    fi
+                else
+                    echo "✅ Node.js déjà installé"
+                fi
+                
+                # Afficher les versions
+                echo "📊 Versions:"
+                node --version || echo "❌ Node.js non disponible"
+                npm --version || echo "❌ npm non disponible"
+            '''
+        }
+    }
+}
+
         
         // STAGE 5: NOUVEAU - Tests de Build
         stage('Build Validation') {
