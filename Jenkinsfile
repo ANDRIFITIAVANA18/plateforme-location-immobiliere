@@ -179,7 +179,6 @@ pipeline {
     }
 }
 
-// AJOUTEZ CE STAGE AU DÉBUT DE VOTRE JENKINSFILE
 stage('Setup Environment') {
     steps {
         script {
@@ -190,19 +189,20 @@ stage('Setup Environment') {
                 if ! command -v node >/dev/null 2>&1; then
                     echo "🚀 Installation de Node.js..."
                     
-                    # Installation automatique
                     if command -v apt-get >/dev/null 2>&1; then
-                        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-                        apt-get install -y nodejs
+                        # Ajouter sudo pour les permissions
+                        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+                        sudo apt-get install -y nodejs
                         echo "✅ Node.js installé"
                     else
                         echo "❌ Impossible d'installer Node.js automatiquement"
+                        echo "💡 Solution: Installer Node.js manuellement sur le serveur Jenkins"
+                        exit 1
                     fi
                 else
                     echo "✅ Node.js déjà installé"
                 fi
                 
-                # Afficher les versions
                 echo "📊 Versions:"
                 node --version || echo "❌ Node.js non disponible"
                 npm --version || echo "❌ npm non disponible"
