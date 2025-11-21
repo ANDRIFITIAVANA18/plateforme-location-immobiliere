@@ -21,19 +21,33 @@ pipeline {
                 sh '''
                     echo "🏗️ Construction..."
                     npm run build
-                    ls -la dist/ || ls -la build/
+                    echo "✅ Build réussi !"
+                    ls -la dist/
                 '''
             }
         }
         
-        stage('Docker') {
+        stage('Préparation Docker') {
             steps {
                 sh '''
-                    echo "🐳 Création image..."
+                    echo "🐳 Installation de Docker dans le conteneur..."
+                    apk update && apk add --no-cache docker
+                    echo "✅ Docker installé"
+                '''
+            }
+        }
+        
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    echo "📦 Création image Docker..."
                     echo "FROM nginx:alpine" > Dockerfile
                     echo "COPY dist/ /usr/share/nginx/html" >> Dockerfile
                     echo "EXPOSE 80" >> Dockerfile
+                    echo "CMD [\"nginx\", \"-g\", \"daemon off;\"]" >> Dockerfile
+                    
                     docker build -t app:${BUILD_NUMBER} .
+                    echo "✅ Image Docker créée: app:${BUILD_NUMBER}"
                 '''
             }
         }
@@ -41,7 +55,9 @@ pipeline {
     
     post {
         success {
-            echo "✅ Réussi !"
+            echo "🎉 SUCCÈS COMPLET !"
+            echo "🐳 Image: app:${BUILD_NUMBER}"
+            echo "🚀 Pour déployer: docker run -p 3000:80 app:${BUILD_NUMBER}"
         }
     }
 }
