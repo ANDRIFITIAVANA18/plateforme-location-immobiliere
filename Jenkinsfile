@@ -133,51 +133,51 @@ pipeline {
         }
         
         // STAGE 4: NOUVEAU - Tests de Sécurité
-        stage('Security Checks') {
-            steps {
-                script {
-                    echo '🛡️  Vérifications de sécurité...'
-                    sh '''
-                        echo "🔒 VÉRIFICATIONS DE SÉCURITÉ"
-                        echo "============================"
-                        
-                        # 1. Fichiers sensibles
-                        echo " "
-                        echo "📁 Fichiers sensibles:"
-                        if [ -f ".env" ]; then
-                            echo "❌ FICHIER .env DÉTECTÉ - NE DEVRAIT PAS ÊTRE COMMITÉ"
-                            exit 1
-                        else
-                            echo "✅ Aucun fichier .env détecté"
-                        fi
-                        
-                        # 2. Mots de passe en clair
-                        echo " "
-                        echo "🔑 Recherche de mots de passe en clair:"
-                        if find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" ! -path "./node_modules/*" -exec grep -i "password.*=.*['\\"]" {} \\; 2>/dev/null | grep -q "."; then
-                            echo "❌ MOTS DE PASSE EN CLAIR DÉTECTÉS"
-                            find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" ! -path "./node_modules/*" -exec grep -i "password.*=.*['\\"]" {} \\; 2>/dev/null | head -3
-                            exit 1
-                        else
-                            echo "✅ Aucun mot de passe en clair détecté"
-                        fi
-                        
-                        # 3. Clés API en clair
-                        echo " "
-                        echo "🔑 Recherche de clés API:"
-                        if find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" ! -path "./node_modules/*" -exec grep -i "api.*key.*=.*['\\"]\\|token.*=.*['\\"]" {} \\; 2>/dev/null | grep -q "."; then
-                            echo "❌ CLÉS API EN CLAIR DÉTECTÉES"
-                            find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" ! -path "./node_modules/*" -exec grep -i "api.*key.*=.*['\\"]\\|token.*=.*['\\"]" {} \\; 2>/dev/null | head -3
-                            exit 1
-                        else
-                            echo "✅ Aucune clé API en clair détectée"
-                        fi
-                        
-                        echo "✅ Tests de sécurité PASSÉS"
-                    '''
-                }
-            }
+    stage('Security Checks') {
+    steps {
+        script {
+            echo '🛡️  Vérifications de sécurité...'
+            sh '''
+                echo "🔒 VÉRIFICATIONS DE SÉCURITÉ"
+                echo "============================"
+                
+                # 1. Fichiers sensibles
+                echo " "
+                echo "📁 Fichiers sensibles:"
+                if [ -f ".env" ]; then
+                    echo "❌ FICHIER .env DÉTECTÉ - NE DEVRAIT PAS ÊTRE COMMITÉ"
+                    exit 1
+                else
+                    echo "✅ Aucun fichier .env détecté"
+                fi
+                
+                # 2. Mots de passe en clair (EXCLUT les dossiers de build)
+                echo " "
+                echo "🔑 Recherche de mots de passe en clair..."
+                if find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" ! -path "./node_modules/*" ! -path "./dist/*" ! -path "./build/*" ! -path "./.next/*" -exec grep -i "password.*=.*['\\"]" {} \\; 2>/dev/null | grep -q "."; then
+                    echo "❌ MOTS DE PASSE EN CLAIR DÉTECTÉS"
+                    find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" ! -path "./node_modules/*" ! -path "./dist/*" ! -path "./build/*" ! -path "./.next/*" -exec grep -l "password.*=.*['\\"]" {} \\; 2>/dev/null | head -3
+                    exit 1
+                else
+                    echo "✅ Aucun mot de passe en clair détecté"
+                fi
+                
+                # 3. Clés API en clair (EXCLUT les dossiers de build)
+                echo " "
+                echo "🔑 Recherche de clés API:"
+                if find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" ! -path "./node_modules/*" ! -path "./dist/*" ! -path "./build/*" ! -path "./.next/*" -exec grep -i "api.*key.*=.*['\\"]\\|token.*=.*['\\"]" {} \\; 2>/dev/null | grep -q "."; then
+                    echo "❌ CLÉS API EN CLAIR DÉTECTÉES"
+                    find . -name "*.ts" -o -name "*.tsx" -o -name "*.js" ! -path "./node_modules/*" ! -path "./dist/*" ! -path "./build/*" ! -path "./.next/*" -exec grep -l "api.*key.*=.*['\\"]\\|token.*=.*['\\"]" {} \\; 2>/dev/null | head -3
+                    exit 1
+                else
+                    echo "✅ Aucune clé API en clair détectée"
+                fi
+                
+                echo "✅ Tests de sécurité PASSÉS"
+            '''
         }
+    }
+}
         
         // STAGE 5: NOUVEAU - Tests de Build
         stage('Build Validation') {
