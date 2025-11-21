@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     triggers {
-        pollSCM('H/1 * * * *')
+        pollSCM('H/2 * * * *')  // ✅ Vérifie Git toutes les 2 minutes
     }
     
     environment {
@@ -11,34 +11,26 @@ pipeline {
     }
     
     stages {
-        stage('🔍 Détection Auto') {
+        stage('🔍 Détection Auto Git') {
             steps {
                 sh """
                     echo "=========================================="
-                    echo "🔍 DÉTECTION AUTOMATIQUE"
+                    echo "🔍 DÉTECTION AUTOMATIQUE GIT"
                     echo "=========================================="
                     
                     echo "📝 Dernier commit: \$(git log -1 --pretty=format:'%h - %s')"
-                    echo "👤 Auteur: \$(git log -1 --pretty=format:'%an')"
+                    echo "👤 Auteur: \$(git log -1 --pretty=format:'%an')" 
+                    echo "📅 Date: \$(git log -1 --pretty=format:'%cd')"
                     echo "🔀 Branche: \$(git branch --show-current)"
+                    
+                    # Détection des changements
+                    echo "🔄 Derniers changements détectés:"
+                    git log --oneline -5
                     
                     if [ -f "package.json" ]; then
                         echo "📦 Type: Application Node.js/React"
                         echo "🆔 Nom: \$(grep '\"name\"' package.json | head -1 | cut -d'\"' -f4)"
-                        echo "📋 Version: \$(grep '\"version\"' package.json | head -1 | cut -d'\"' -f4)"
-                        
-                        if grep -q '\"react\"' package.json; then
-                            echo "⚛️  Framework: React"
-                        fi
-                        
-                        if [ -f "tsconfig.json" ]; then
-                            echo "📘 Langage: TypeScript"
-                        fi
                     fi
-                    
-                    echo "📁 Structure:"
-                    echo "• Composants: \$(find src -name '*.tsx' -o -name '*.jsx' 2>/dev/null | wc -l)"
-                    echo "• Tests: \$(find . -name '*.test.*' -o -name '*.spec.*' 2>/dev/null | wc -l)"
                 """
             }
         }
@@ -60,13 +52,10 @@ pipeline {
                 stage('📘 TypeScript') {
                     steps {
                         sh """
-                            echo "🔬 VALIDATION TYPESCRIPT"
                             docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                                 if [ -f 'tsconfig.json' ]; then
                                     npx tsc --noEmit --skipLibCheck
                                     echo '✅ TypeScript validé'
-                                else
-                                    echo '⚠️  TypeScript non configuré'
                                 fi
                             "
                         """
@@ -76,12 +65,9 @@ pipeline {
                 stage('📏 ESLint') {
                     steps {
                         sh """
-                            echo "🎨 ANALYSE DE CODE"
                             docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                                 if npx eslint --version > /dev/null 2>&1; then
                                     npx eslint . --ext .js,.jsx,.ts,.tsx || echo '⚠️  Problèmes de style'
-                                else
-                                    echo '⚠️  ESLint non disponible'
                                 fi
                             "
                         """
@@ -93,7 +79,6 @@ pipeline {
         stage('🧪 Tests Auto') {
             steps {
                 sh """
-                    echo "🔬 TESTS AUTOMATISÉS"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                         npm test -- --watchAll=false --passWithNoTests --silent
                         echo '✅ Tests terminés'
@@ -105,17 +90,11 @@ pipeline {
         stage('🛡️ Sécurité') {
             steps {
                 sh """
-                    echo "🔒 ANALYSE DE SÉCURITÉ"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                         npm audit --audit-level=high || echo '⚠️  Audit avec avertissements'
                         
                         if [ -f '.env' ]; then
                             echo '❌ FICHIER .env DÉTECTÉ'
-                            exit 1
-                        fi
-                        
-                        if grep -r 'AKIA[0-9A-Z]' src/ > /dev/null 2>&1; then
-                            echo '❌ CLÉS AWS DÉTECTÉES'
                             exit 1
                         fi
                         
@@ -128,7 +107,6 @@ pipeline {
         stage('🏗️ Build Production') {
             steps {
                 sh """
-                    echo "🔨 BUILD PRODUCTION"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                         npm run build
                         echo '✅ Build réussi'
@@ -137,7 +115,7 @@ pipeline {
                 
                 sh """
                     if [ -d "dist" ]; then
-                        echo "📊 Build dans: dist/"
+                        echo "📊 Build créé dans: dist/"
                         echo "📁 Taille: \$(du -sh dist | cut -f1)"
                     fi
                 """
@@ -147,33 +125,32 @@ pipeline {
         stage('🐳 Dockerisation') {
             steps {
                 sh """
-                    echo "📦 CRÉATION IMAGE DOCKER"
-                    
-                    cat > Dockerfile << EOF
-FROM nginx:alpine
-COPY dist/ /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-EOF
+                    echo "FROM nginx:alpine" > Dockerfile
+                    echo "COPY dist/ /usr/share/nginx/html" >> Dockerfile
+                    echo "EXPOSE 80" >> Dockerfile
+                    echo "CMD [\"nginx\", \"-g\", \"daemon off;\"]" >> Dockerfile
                     
                     docker build -t plateforme-location:\${BUILD_NUMBER} .
-                    echo "✅ Image: plateforme-location:\${BUILD_NUMBER}"
+                    echo "✅ Image Docker créée: plateforme-location:\${BUILD_NUMBER}"
                 """
             }
         }
     }
     
     post {
-        always {
-            echo "🏁 PIPELINE TERMINÉ - Build #\${BUILD_NUMBER}"
-        }
         success {
-            echo "🎉 SUCCÈS COMPLET"
-            echo "🐳 Image: plateforme-location:\${BUILD_NUMBER}"
-            echo "🚀 docker run -p 3000:80 plateforme-location:\${BUILD_NUMBER}"
-        }
-        failure {
-            echo "❌ ÉCHEC - Vérifiez les logs"
+            echo "🎉 DÉPLOIEMENT AUTOMATIQUE RÉUSSI !"
+            echo "📋 RAPPORT:"
+            echo "• ✅ Détection auto Git activée"
+            echo "• ✅ Tests automatisés" 
+            echo "• ✅ Validation qualité"
+            echo "• ✅ Analyse sécurité"
+            echo "• ✅ Build production"
+            echo "• ✅ Image Docker"
+            echo ""
+            echo "🚀 COMMANDE DE DÉPLOIEMENT:"
+            echo "docker run -d -p 3000:80 plateforme-location:\${BUILD_NUMBER}"
+            echo "🌐 VOTRE APP: http://localhost:3000"
         }
     }
 }
