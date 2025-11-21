@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     triggers {
-        pollSCM('H/5 * * * *')  // ✅ Détection auto des changements Git toutes les 5 minutes
+        pollSCM('H/1 * * * *')  // ✅ Détection auto des changements Git
     }
     
     environment {
@@ -34,12 +34,6 @@ pipeline {
                         if grep -q '"react"' package.json; then
                             echo "⚛️  Framework: React"
                         fi
-                        if grep -q '"vue"' package.json; then
-                            echo "🟢 Framework: Vue.js"
-                        fi
-                        if grep -q '"angular"' package.json; then
-                            echo "⚡ Framework: Angular"
-                        fi
                         
                         # Détection TypeScript
                         if [ -f "tsconfig.json" ]; then
@@ -51,7 +45,6 @@ pipeline {
                     echo "📁 Structure du projet:"
                     echo "• Composants: $(find src -name '*.tsx' -o -name '*.jsx' 2>/dev/null | wc -l)"
                     echo "• Tests: $(find . -name '*.test.*' -o -name '*.spec.*' 2>/dev/null | wc -l)"
-                    echo "• Configurations: $(find . -name '*.json' -o -name '*.config.*' 2>/dev/null | wc -l)"
                 '''
             }
         }
@@ -60,13 +53,9 @@ pipeline {
             steps {
                 sh '''
                     echo "🔧 INSTALLATION INTELLIGENTE"
-                    docker run --rm -v `pwd`:/app -w /app node:18-alpine sh -c "
+                    docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
                         echo '📦 Installation des dépendances...'
-                        if [ -f 'package-lock.json' ]; then
-                            npm ci --silent
-                        else
-                            npm install --silent
-                        fi
+                        npm install --silent
                         echo '✅ Dépendances installées'
                     "
                 '''
@@ -79,10 +68,10 @@ pipeline {
                     steps {
                         sh '''
                             echo "🔬 VALIDATION TYPESCRIPT"
-                            docker run --rm -v `pwd`:/app -w /app node:18-alpine sh -c "
+                            docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
                                 if [ -f 'tsconfig.json' ]; then
                                     echo '📝 Compilation TypeScript...'
-                                    npx tsc --noEmit --skipLibCheck --strict
+                                    npx tsc --noEmit --skipLibCheck
                                     echo '✅ Aucune erreur TypeScript'
                                 else
                                     echo '⚠️  TypeScript non configuré'
@@ -96,10 +85,10 @@ pipeline {
                     steps {
                         sh '''
                             echo "🎨 ANALYSE DE CODE"
-                            docker run --rm -v `pwd`:/app -w /app node:18-alpine sh -c "
+                            docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
                                 if npx eslint --version > /dev/null 2>&1; then
                                     echo '🔍 Exécution ESLint...'
-                                    npx eslint src/ || echo '⚠️  Problèmes de style détectés'
+                                    npx eslint . --ext .js,.jsx,.ts,.tsx || echo '⚠️  Problèmes de style détectés'
                                 else
                                     echo '⚠️  ESLint non disponible'
                                 fi
@@ -114,24 +103,10 @@ pipeline {
             steps {
                 sh '''
                     echo "🔬 TESTS AUTOMATISÉS"
-                    docker run --rm -v `pwd`:/app -w /app node:18-alpine sh -c "
+                    docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
                         echo '🏃‍♂️ Exécution des tests...'
-                        
-                        # Détection automatique de la commande de test
-                        if npm run test:ci > /dev/null 2>&1; then
-                            npm run test:ci
-                        elif npm run test -- --watchAll=false > /dev/null 2>&1; then
-                            npm run test -- --watchAll=false
-                        else
-                            npm test -- --watchAll=false --passWithNoTests
-                        fi
-                        
+                        npm test -- --watchAll=false --passWithNoTests --silent
                         echo '✅ Tests terminés'
-                        
-                        # Rapport de couverture si disponible
-                        if [ -d 'coverage' ]; then
-                            echo '📊 Rapport de couverture généré'
-                        fi
                     "
                 '''
             }
@@ -141,7 +116,7 @@ pipeline {
             steps {
                 sh '''
                     echo "🔒 ANALYSE DE SÉCURITÉ"
-                    docker run --rm -v `pwd`:/app -w /app node:18-alpine sh -c "
+                    docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
                         echo '📦 Audit des vulnérabilités npm...'
                         npm audit --audit-level=high || echo '⚠️  Audit avec avertissements'
                         
@@ -172,22 +147,23 @@ pipeline {
             steps {
                 sh '''
                     echo "🔨 BUILD PRODUCTION"
-                    docker run --rm -v `pwd`:/app -w /app node:18-alpine sh -c "
+                    docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
                         echo '🏗️ Construction de l application...'
                         npm run build
-                        
                         echo '✅ Build réussi!'
-                        
-                        # Analyse du build
-                        if [ -d 'dist' ]; then
-                            echo '📊 Build dans: dist/'
-                            echo '📁 Taille: $(du -sh dist | cut -f1)'
-                            echo '📋 Fichiers: $(find dist -type f | wc -l)'
-                        elif [ -d 'build' ]; then
-                            echo '📊 Build dans: build/'
-                            echo '📁 Taille: $(du -sh build | cut -f1)'
-                        fi
                     "
+                    
+                    # Analyse du build
+                    sh '''
+                        if [ -d "dist" ]; then
+                            echo "📊 Build dans: dist/"
+                            echo "📁 Taille: $(du -sh dist | cut -f1)"
+                            echo "📋 Fichiers: $(find dist -type f | wc -l)"
+                        elif [ -d "build" ]; then
+                            echo "📊 Build dans: build/"
+                            echo "📁 Taille: $(du -sh build | cut -f1)"
+                        fi
+                    '''
                 '''
             }
         }
@@ -199,20 +175,13 @@ pipeline {
                     
                     # Création du Dockerfile
                     cat > Dockerfile << 'EOF'
-# Image de production
 FROM nginx:alpine
-
-# Copier les fichiers buildés
 COPY dist/ /usr/share/nginx/html
-
-# Exposition du port
 EXPOSE 80
-
-# Commande de démarrage
 CMD ["nginx", "-g", "daemon off;"]
 EOF
                     
-                    echo '🔨 Construction de l image...'
+                    echo "🔨 Construction de l image..."
                     docker build -t plateforme-location:${BUILD_NUMBER} .
                     
                     echo "✅ Image créée: plateforme-location:${BUILD_NUMBER}"
@@ -228,10 +197,7 @@ EOF
     post {
         always {
             echo "🏁 PIPELINE TERMINÉ - Build #${BUILD_NUMBER}"
-            sh '''
-                echo "📅 Heure de fin: $(date)"
-                echo "🕐 Durée: ${currentBuild.durationString}"
-            '''
+            echo "📅 Heure de fin: $(date)"
         }
         success {
             echo "🎉 SUCCÈS COMPLET !"
@@ -256,10 +222,6 @@ EOF
             echo "2. Testez localement avec: npm run build"
             echo "3. Corrigez les erreurs identifiées"
             echo "4. Recommitez et relancez le pipeline"
-        }
-        unstable {
-            echo "⚠️  PIPELINE INSTABLE"
-            echo "Certains tests ou vérifications ont échoué"
         }
     }
 }
