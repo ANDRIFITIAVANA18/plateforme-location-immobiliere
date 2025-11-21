@@ -60,16 +60,16 @@ pipeline {
                         if find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*string.*=.*[0-9]" {} \\; 2>/dev/null | grep -q "."; then
                             echo "❌ ERREUR: Assignation number -> string détectée"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
-                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation string = number"
-                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -H "const.*string.*=.*[0-9]" {} \\; 2>/dev/null || true
+                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation string = number dans:"
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*string.*=.*[0-9]" {} \\; 2>/dev/null | head -5
                         fi
                         
                         # Pattern number = string  
                         if find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*number.*=.*['\\"]" {} \\; 2>/dev/null | grep -q "."; then
                             echo "❌ ERREUR: Assignation string -> number détectée"
                             ERROR_COUNT=$((ERROR_COUNT + 1))
-                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation number = string"
-                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -H "const.*number.*=.*['\\"]" {} \\; 2>/dev/null || true
+                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Assignation number = string dans:"
+                            find . -name "*.ts" -o -name "*.tsx" ! -path "./node_modules/*" -exec grep -l "const.*number.*=.*['\\"]" {} \\; 2>/dev/null | head -5
                         fi
                         
                         # Méthode 2: Vérification fichiers de test
@@ -82,37 +82,37 @@ pipeline {
                                 echo "❌ Fichier de test détecté: $test_file"
                                 ERROR_COUNT=$((ERROR_COUNT + 1))
                                 TEST_FILES_COUNT=$((TEST_FILES_COUNT + 1))
+                                FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- $test_file"
                             fi
                         done
                         
-                        if [ $TEST_FILES_COUNT -gt 0 ]; then
-                            FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- $TEST_FILES_COUNT fichier(s) de test avec erreurs"
-                        fi
-                        
-                        # Méthode 3: Compilation TypeScript (OPTIONNELLE - seulement si npx disponible)
+                        # Méthode 3: Compilation TypeScript (SEULEMENT si disponible)
                         echo " "
                         echo "🔎 Méthode 3: Vérification compilation TypeScript..."
                         
-                        if command -v npx >/dev/null 2>&1 || [ -f "node_modules/.bin/tsc" ]; then
-                            echo "🛠️  Exécution de la compilation TypeScript..."
+                        # Vérification RÉELLE de la disponibilité de npx
+                        if which npx >/dev/null 2>&1 || [ -f "node_modules/.bin/tsc" ]; then
+                            echo "🛠️  npx disponible - Exécution de la compilation TypeScript..."
                             npx tsc --noEmit --skipLibCheck 2> ts_errors.txt || true
                             
                             if [ -s "ts_errors.txt" ]; then
                                 echo "❌ ERREURS DE COMPILATION TypeScript détectées"
                                 ERROR_COUNT=$((ERROR_COUNT + 1))
                                 FILES_WITH_ERRORS="$FILES_WITH_ERRORS\\n- Erreurs de compilation TypeScript"
-                                cat ts_errors.txt | head -10
+                                echo "Premières erreurs:"
+                                cat ts_errors.txt | head -5
                             else
                                 echo "✅ Aucune erreur de compilation TypeScript"
                             fi
-                            rm -f ts_errors.txt
+                            rm -f ts_errors.txt 2>/dev/null || true
                         else
-                            echo "⚠️  Compilateur TypeScript non disponible - skip vérification compilation"
+                            echo "✅ Compilation TypeScript ignorée (npx non disponible)"
                             echo "ℹ️  Pour une vérification complète, installez Node.js sur Jenkins"
                         fi
                         
                         # Résultat final
                         echo " "
+                        echo "=== RÉSULTAT FINAL ==="
                         if [ $ERROR_COUNT -eq 0 ]; then
                             echo "✅✅✅ AUCUNE ERREUR TYPESCRIPT DÉTECTÉE"
                             echo "✅ Validation TypeScript RÉUSSIE"
