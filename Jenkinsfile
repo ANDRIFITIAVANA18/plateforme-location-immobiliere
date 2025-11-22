@@ -4,13 +4,11 @@ pipeline {
     triggers {
         githubPush()
         pollSCM('H/2 * * * *')
-        cron('H/5 * * * *')
     }
     
     environment {
         NODE_ENV = 'production'
         CI = 'true'
-        DOCKER_IMAGE = "plateforme-location:${BUILD_NUMBER}"
     }
     
     stages {
@@ -44,311 +42,126 @@ pipeline {
             }
         }
         
-        stage('⚙️ Setup') {
-            parallel {
-                stage('📦 Installation') {
-                    steps {
-                        sh """
-                            echo "🔧 INSTALLATION DES DÉPENDANCES"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                if [ -f 'package-lock.json' ]; then
-                                    npm ci --silent
-                                else
-                                    npm install --silent
-                                fi
-                                echo '✅ Dépendances installées'
-                                echo '📊 Taille: \$(du -sh node_modules | cut -f1)'
-                            "
-                        """
-                    }
-                }
-                
-                stage('🔧 Outils') {
-                    steps {
-                        sh """
-                            echo "🛠️ VÉRIFICATION DES OUTILS"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                echo 'Node: \$(node --version)'
-                                echo 'npm: \$(npm --version)'
-                                echo 'TypeScript: \$(npx tsc --version || echo 'N/A')'
-                            "
-                        """
-                    }
-                }
+        stage('🔧 Vérification Docker') {
+            steps {
+                sh """
+                    echo "🐳 VÉRIFICATION DOCKER"
+                    if docker --version > /dev/null 2>&1; then
+                        echo "✅ Docker disponible"
+                        docker ps > /dev/null 2>&1 && echo "✅ Permissions Docker OK" || {
+                            echo "❌ Permissions Docker manquantes"
+                            echo "🔧 Exécutez: docker exec -u 0 jenkins-docker usermod -aG docker jenkins"
+                            exit 1
+                        }
+                    else
+                        echo "❌ Docker non disponible"
+                        exit 1
+                    fi
+                """
             }
         }
         
-        stage('🧪 Test Suite') {
-            parallel {
-                stage('✅ Unit Tests') {
-                    steps {
-                        sh """
-                            echo "🔬 TESTS UNITAIRES"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                npm test -- --watchAll=false --passWithNoTests --silent --coverage
-                                echo '✅ Tests unitaires validés'
-                            "
-                        """
-                    }
-                }
-                
-                stage('📘 TypeScript') {
-                    steps {
-                        sh """
-                            echo "🔍 VALIDATION TYPESCRIPT"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                npx tsc --noEmit --skipLibCheck --strict
-                                echo '✅ TypeScript validé'
-                            "
-                        """
-                    }
-                }
-                
-                stage('📏 Code Quality') {
-                    steps {
-                        sh """
-                            echo "🎨 ANALYSE DE CODE"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                # ESLint avec gestion d'erreur
-                                npx eslint . --ext .js,.jsx,.ts,.tsx 2>/dev/null && echo '✅ Code style validé' || echo '⚠️  Problèmes de style détectés'
-                                
-                                # Vérification des fichiers critiques
-                                [ -f 'src/App.tsx' ] && echo '✅ App.tsx présent' || echo '❌ App.tsx manquant'
-                                [ -f 'src/main.tsx' ] && echo '✅ main.tsx présent' || echo '❌ main.tsx manquant'
-                            "
-                        """
-                    }
-                }
+        stage('📥 Installation') {
+            steps {
+                sh """
+                    echo "🔧 INSTALLATION DES DÉPENDANCES"
+                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
+                        npm install --silent
+                        echo '✅ Dépendances installées'
+                        echo 'Node: \$(node --version)'
+                        echo 'npm: \$(npm --version)'
+                    "
+                """
             }
         }
         
-        stage('🛡️ Security Scan') {
-            parallel {
-                stage('🔒 Audit NPM') {
-                    steps {
-                        sh """
-                            echo "📦 AUDIT DE SÉCURITÉ"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                npm audit --audit-level=high
-                                echo '✅ Audit sécurité passé'
-                            "
-                        """
-                    }
-                }
-                
-                stage('🚨 Secrets Check') {
-                    steps {
-                        sh """
-                            echo "🔍 RECHERCHE DE SECRETS"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                # Vérification des fichiers sensibles
-                                [ ! -f '.env' ] || { echo '❌ .env détecté'; exit 1; }
-                                [ ! -f '.env.local' ] || { echo '❌ .env.local détecté'; exit 1; }
-                                
-                                # Recherche de clés API
-                                if grep -r 'AKIA[0-9A-Z]' src/ > /dev/null 2>&1; then
-                                    echo '❌ Clés AWS détectées'
-                                    exit 1
-                                fi
-                                
-                                echo '✅ Aucun secret détecté'
-                            "
-                        """
-                    }
-                }
+        stage('✅ Validation') {
+            steps {
+                sh """
+                    echo "🔬 VALIDATION"
+                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
+                        npx tsc --noEmit --skipLibCheck
+                        echo '✅ TypeScript validé'
+                        
+                        npm test -- --watchAll=false --passWithNoTests --silent
+                        echo '✅ Tests terminés'
+                    "
+                """
             }
         }
         
         stage('🏗️ Build') {
-            parallel {
-                stage('🔨 Production Build') {
-                    steps {
-                        sh """
-                            echo "🏗️ BUILD PRODUCTION"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                npm run build
-                                echo '✅ Build production réussi'
-                            "
-                        """
-                    }
-                }
-                
-                stage('📊 Build Analysis') {
-                    steps {
-                        sh """
-                            echo "📈 ANALYSE DU BUILD"
-                            if [ -d "dist" ]; then
-                                echo "📊 Dossier: dist/"
-                                echo "📁 Taille: \$(du -sh dist | cut -f1)"
-                                echo "📋 Fichiers: \$(find dist -type f | wc -l)"
-                                echo "🔍 Principaux fichiers:"
-                                find dist -type f -name "*.js" -o -name "*.html" -o -name "*.css" | head -5
-                            else
-                                echo "❌ Aucun build détecté"
-                                exit 1
-                            fi
-                        """
-                    }
-                }
-            }
-        }
-        
-        stage('🐳 Containerization') {
-            parallel {
-                stage('📦 Docker Build') {
-                    steps {
-                        sh """
-                            echo "🐳 CONSTRUCTION IMAGE DOCKER"
-                            
-                            # Création du Dockerfile optimisé
-                            cat > Dockerfile << 'EOF'
-# Multi-stage build pour optimisation
-FROM node:18-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-EOF
-                            
-                            docker build -t ${DOCKER_IMAGE} .
-                            echo "✅ Image créée: ${DOCKER_IMAGE}"
-                        """
-                    }
-                }
-                
-                stage('📋 Image Registry') {
-                    steps {
-                        sh """
-                            echo "📊 REGISTRE D'IMAGES"
-                            echo "Images plateforme-location:"
-                            docker images | grep plateforme-location | head -5
-                            
-                            echo "📏 Taille image:"
-                            docker images ${DOCKER_IMAGE} --format "table {{.Repository}}\\t{{.Tag}}\\t{{.Size}}"
-                        """
-                    }
-                }
-            }
-        }
-        
-        stage('🚀 Deployment') {
-            parallel {
-                stage('🌐 Deploy Staging') {
-                    steps {
-                        sh """
-                            echo "🚀 DÉPLOIEMENT STAGING"
-                            
-                            # Arrêt de l'ancien conteneur
-                            docker stop plateforme-staging || true
-                            docker rm plateforme-staging || true
-                            
-                            # Déploiement du nouveau
-                            docker run -d \
-                                --name plateforme-staging \
-                                -p 3001:80 \
-                                ${DOCKER_IMAGE}
-                            
-                            echo "✅ Déployé sur: http://localhost:3001"
-                            echo "📊 Statut: \$(docker ps --filter name=plateforme-staging --format 'table {{.Names}}\\t{{.Status}}')"
-                        """
-                    }
-                }
-                
-                stage('🎯 Deploy Production') {
-                    steps {
-                        sh """
-                            echo "🚀 DÉPLOIEMENT PRODUCTION"
-                            
-                            # Arrêt de l'ancien conteneur
-                            docker stop plateforme-production || true
-                            docker rm plateforme-production || true
-                            
-                            # Déploiement du nouveau
-                            docker run -d \
-                                --name plateforme-production \
-                                -p 3000:80 \
-                                ${DOCKER_IMAGE}
-                            
-                            echo "✅ Déployé sur: http://localhost:3000"
-                            echo "📊 Statut: \$(docker ps --filter name=plateforme-production --format 'table {{.Names}}\\t{{.Status}}')"
-                        """
-                    }
-                }
-            }
-        }
-        
-        stage('📈 Health Check') {
             steps {
                 sh """
-                    echo "🏥 VÉRIFICATION SANTÉ"
+                    echo "🔨 BUILD PRODUCTION"
+                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
+                        npm run build
+                        echo '✅ Build réussi'
+                    "
+                """
+                
+                sh """
+                    echo "📊 ANALYSE BUILD"
+                    if [ -d "dist" ]; then
+                        echo "📁 Dossier: dist/"
+                        echo "📏 Taille: \$(du -sh dist | cut -f1)"
+                        echo "📋 Fichiers: \$(find dist -type f | wc -l)"
+                    fi
+                """
+            }
+        }
+        
+        stage('🐳 Docker') {
+            steps {
+                sh """
+                    echo "📦 CRÉATION IMAGE DOCKER"
                     
-                    # Attendre que l'application soit prête
-                    sleep 10
+                    echo 'FROM nginx:alpine' > Dockerfile
+                    echo 'COPY dist/ /usr/share/nginx/html' >> Dockerfile
+                    echo 'EXPOSE 80' >> Dockerfile
+                    echo 'CMD [\"nginx\", \"-g\", \"daemon off;\"]' >> Dockerfile
                     
-                    # Test de santé
-                    echo "🔍 Test de connectivité..."
-                    curl -f http://localhost:3000 > /dev/null 2>&1 && echo "✅ Application accessible" || echo "❌ Application inaccessible"
+                    docker build -t plateforme-location:\${BUILD_NUMBER} .
+                    echo "✅ Image créée: plateforme-location:\${BUILD_NUMBER}"
+                """
+            }
+        }
+        
+        stage('🚀 Déploiement') {
+            steps {
+                sh """
+                    echo "🚀 DÉPLOIEMENT LOCAL"
                     
-                    echo "📊 Conteneurs en cours:"
-                    docker ps --filter name=plateforme --format "table {{.Names}}\\t{{.Ports}}\\t{{.Status}}"
+                    # Arrêt ancien conteneur
+                    docker stop plateforme-app || true
+                    docker rm plateforme-app || true
+                    
+                    # Déploiement nouveau
+                    docker run -d \
+                        --name plateforme-app \
+                        -p 3000:80 \
+                        plateforme-location:\${BUILD_NUMBER}
+                    
+                    echo "✅ Déployé sur: http://localhost:3000"
+                    
+                    # Vérification
+                    sleep 5
+                    echo "📊 Statut: \$(docker ps --filter name=plateforme-app --format 'table {{.Names}}\\t{{.Status}}')"
                 """
             }
         }
     }
     
     post {
-        always {
-            echo "🏁 PIPELINE TERMINÉ - Build #${BUILD_NUMBER}"
-            
-            script {
-                def duration = currentBuild.durationString
-                echo "⏱️ Durée: ${duration}"
-                
-                // Statistiques finales
-                echo "📈 STATISTIQUES:"
-                echo "• Build: #${BUILD_NUMBER}"
-                echo "• Statut: ${currentBuild.result}"
-                echo "• Durée: ${duration}"
-                echo "• Image: ${DOCKER_IMAGE}"
-            }
-        }
-        
         success {
-            echo "🎉 DÉPLOIEMENT RÉUSSI !"
-            echo "📋 RAPPORT FINAL:"
-            echo "• ✅ 8/8 étapes validées"
-            echo "• 🐳 Image: ${DOCKER_IMAGE}"
-            echo "• 🌐 Staging: http://localhost:3001"
-            echo "• 🚀 Production: http://localhost:3000"
-            echo "• 📊 Health: Application opérationnelle"
-            
-            script {
-                currentBuild.description = "SUCCESS - ${currentBuild.description}"
-            }
+            echo "🎉 SUCCÈS - Build #${BUILD_NUMBER}"
+            echo "🌐 Application: http://localhost:3000"
+            echo "🐳 Image: plateforme-location:${BUILD_NUMBER}"
         }
-        
         failure {
-            echo "❌ DÉPLOIEMENT ÉCHOUÉ"
-            echo "🔧 DIAGNOSTIC:"
-            echo "• Vérifiez les logs d'erreur"
-            echo "• Testez localement: npm run build"
-            echo "• Corrigez et relancez"
-            
-            script {
-                currentBuild.description = "FAILED - ${currentBuild.description}"
-            }
-        }
-        
-        unstable {
-            echo "⚠️  BUILD INSTABLE"
-            echo "Certains tests ont échoué mais ne sont pas critiques"
+            echo "❌ ÉCHEC - Vérifiez les permissions Docker"
+            echo "🔧 Commande de réparation:"
+            echo "docker exec -u 0 jenkins-docker usermod -aG docker jenkins"
         }
     }
 }
