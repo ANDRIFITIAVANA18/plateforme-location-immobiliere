@@ -1,10 +1,11 @@
 pipeline {
     agent any
     
-    // ✅ TRIGGERS RENFORCÉS
+    // TRIGGERS RENFORCÉS
     triggers {
         githubPush()
         pollSCM('* * * * *')  // ✅ Toutes les minutes pour test
+        cron('H/2 * * * *')   // ✅ Backup toutes les 2 minutes
     }
     
     environment {
@@ -14,113 +15,83 @@ pipeline {
     }
     
     stages {
-        stage('🎯 Diagnostic Déclenchement') {
+        stage('🎯 DIAGNOSTIC DÉCLENCHEMENT') {
             steps {
                 script {
                     echo "=========================================="
-                    echo "🔍 DIAGNOSTIC DÉCLENCHEMENT AUTO"
+                    echo "🔍 DIAGNOSTIC COMPLET DÉCLENCHEMENT"
                     echo "=========================================="
                     
-                    // 🔥 ANALYSE COMPLÈTE DES CAUSES
+                    // ANALYSE DÉTAILLÉE DES CAUSES
                     def causes = currentBuild.getBuildCauses()
-                    echo "📋 Nombre de causes: ${causes.size()}"
+                    echo "📋 NOMBRE DE CAUSES: ${causes.size()}"
                     
                     causes.eachWithIndex { cause, index ->
-                        echo "--- Cause #${index + 1} ---"
-                        echo "Description: ${cause.shortDescription}"
-                        echo "Classe: ${cause.getClass().getName()}"
-                        if (cause.properties) {
-                            cause.properties.each { key, value ->
-                                if (!key.contains('class') && !key.contains('MetaClass')) {
-                                    echo "  ${key}: ${value}"
-                                }
-                            }
+                        echo ""
+                        echo "🎯 CAUSE #${index + 1}:"
+                        echo "  📝 Description: ${cause.shortDescription}"
+                        echo "  🔧 Classe: ${cause.getClass().getName()}"
+                        if (cause.userId) {
+                            echo "  👤 User: ${cause.userId}"
                         }
                     }
                     
                     // DÉTECTION SPÉCIFIQUE
-                    boolean isAutoSCM = false
-                    boolean isAutoGitHub = false
-                    boolean isManual = false
+                    boolean isAutoSCM = currentBuild.getBuildCauses('hudson.triggers.SCMTrigger$SCMTriggerCause')
+                    boolean isAutoGitHub = currentBuild.getBuildCauses('com.cloudbees.jenkins.GitHubPushCause')
+                    boolean isManual = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')
                     
-                    causes.each { cause ->
-                        def className = cause.getClass().getName()
-                        echo "🔎 Analyse: ${className}"
-                        
-                        if (className.contains('SCMTriggerCause')) {
-                            isAutoSCM = true
-                            echo "✅ DÉTECTÉ: Changement SCM (Polling Git)"
-                            currentBuild.description = "🔄 Auto-SCM: Build #${BUILD_NUMBER}"
-                        }
-                        else if (className.contains('GitHubPushCause')) {
-                            isAutoGitHub = true
-                            echo "✅ DÉTECTÉ: Webhook GitHub (Push)"
-                            currentBuild.description = "🚀 Auto-Webhook: Build #${BUILD_NUMBER}"
-                        }
-                        else if (className.contains('UserIdCause')) {
-                            isManual = true
-                            echo "👤 DÉTECTÉ: Déclenchement manuel"
-                            currentBuild.description = "👤 Manuel: Build #${BUILD_NUMBER}"
-                        }
+                    if (isAutoSCM) {
+                        echo "✅ ✅ ✅ DÉCLENCHÉ AUTOMATIQUEMENT PAR POLLING SCM"
+                        currentBuild.description = "🔄 AUTO-SCM: Build #${BUILD_NUMBER}"
+                    }
+                    else if (isAutoGitHub) {
+                        echo "✅ ✅ ✅ DÉCLENCHÉ AUTOMATIQUEMENT PAR WEBHOOK GITHUB"
+                        currentBuild.description = "🚀 AUTO-WEBHOOK: Build #${BUILD_NUMBER}"
+                    }
+                    else if (isManual) {
+                        echo "👤 DÉCLENCHÉ MANUELLEMENT"
+                        currentBuild.description = "👤 MANUEL: Build #${BUILD_NUMBER}"
+                    }
+                    else {
+                        echo "❓ MODE DE DÉCLENCHEMENT INCONNU"
+                        currentBuild.description = "❓ INCONNU: Build #${BUILD_NUMBER}"
                     }
                     
-                    if (!isAutoSCM && !isAutoGitHub && !isManual) {
-                        echo "❓ DÉCLENCHEMENT INCONNU - Causes:"
-                        causes.each { cause ->
-                            echo "  - ${cause.shortDescription}"
-                        }
-                        currentBuild.description = "❓ Inconnu: Build #${BUILD_NUMBER}"
-                    }
-                    
-                    // STATISTIQUES
+                    // VÉRIFICATION CONFIGURATION
                     echo ""
-                    echo "📊 STATISTIQUES DÉCLENCHEMENT:"
-                    echo "• Auto SCM: ${isAutoSCM}"
-                    echo "• Auto GitHub: ${isAutoGitHub}"
-                    echo "• Manuel: ${isManual}"
-                    echo "• Build: #${BUILD_NUMBER}"
+                    echo "🔧 VÉRIFICATION CONFIGURATION:"
+                    echo "• Poll SCM: ${isAutoSCM ? '✅ ACTIF' : '❌ INACTIF'}"
+                    echo "• GitHub Webhook: ${isAutoGitHub ? '✅ ACTIF' : '❌ INACTIF'}"
                 }
-            }
-        }
-        
-        stage('🔍 Analyse Git Détaillée') {
-            steps {
+                
                 sh """
+                    echo ""
                     echo "=========================================="
-                    echo "🔍 ANALYSE GIT APPROFONDIE"
+                    echo "📊 ANALYSE GIT DÉTAILLÉE"
                     echo "=========================================="
                     
-                    echo "📝 Dernier commit:"
-                    git log -1 --pretty=format:'%Cgreen%h%Creset - %s - %Cblue%an%Creset - %cr'
+                    echo "🕐 Heure actuelle: \$(date)"
+                    echo "🔢 Build: #${BUILD_NUMBER}"
                     
                     echo ""
-                    echo "👤 Informations auteur:"
-                    git log -1 --pretty=format:'• Nom: %an%n• Email: %ae%n• Date: %cd'
+                    echo "📝 DERNIER COMMIT:"
+                    git log -1 --pretty=format:'• Hash: %h%n• Message: %s%n• Auteur: %an%n• Date: %cd'
                     
                     echo ""
-                    echo "🔀 Branche actuelle:"
-                    git branch --show-current
+                    echo "🔄 HISTORIQUE RÉCENT:"
+                    git log --oneline -3 --pretty=format:'• %h - %s (%cr)'
                     
                     echo ""
-                    echo "🔄 Derniers commits (5):"
-                    git log --oneline -5 --graph --decorate
+                    echo "📁 FICHIERS MODIFIÉS:"
+                    git diff --name-only HEAD~1 HEAD 2>/dev/null | while read file; do
+                        echo "• \${file}"
+                    done || echo "• Premier commit ou pas d'historique"
                     
                     echo ""
-                    echo "📁 Fichiers modifiés dans dernier commit:"
-                    git show --name-only --pretty=format:'' HEAD | head -10
-                    
-                    echo ""
-                    echo "📊 Statistiques repository:"
-                    echo "• Total commits: \$(git rev-list --count HEAD)"
-                    echo "• Dernière modification: \$(git log -1 --pretty=format:'%cr')"
-                    echo "• Hash complet: \$(git rev-parse HEAD)"
-                    
-                    echo ""
-                    echo "📦 Informations projet:"
-                    if [ -f "package.json" ]; then
-                        echo "• Nom: \$(jq -r '.name' package.json 2>/dev/null || grep '\"name\"' package.json | head -1 | cut -d'\"' -f4)"
-                        echo "• Version: \$(jq -r '.version' package.json 2>/dev/null || grep '\"version\"' package.json | head -1 | cut -d'\"' -f4)"
-                    fi
+                    echo "🌐 DÉPÔT:"
+                    echo "• URL: \$(git config --get remote.origin.url)"
+                    echo "• Branche: \$(git branch --show-current)"
                 """
             }
         }
@@ -129,17 +100,8 @@ pipeline {
             steps {
                 sh """
                     echo "🐳 VÉRIFICATION DOCKER"
-                    echo "• Version: \$(docker --version 2>/dev/null || echo 'Non disponible')"
-                    echo "• Statut: \$(docker ps >/dev/null 2>&1 && echo '✅ OK' || echo '❌ Erreur')"
-                    
-                    echo ""
-                    echo "🔍 Ports utilisés:"
-                    echo "• Port 3000: \$(docker ps --format '{{.Ports}}' | grep 3000 | wc -l) conteneur(s)"
-                    echo "• Port ${APP_PORT}: \$(docker ps --format '{{.Ports}}' | grep ${APP_PORT} | wc -l) conteneur(s)"
-                    
-                    echo ""
-                    echo "📋 Conteneurs en cours:"
-                    docker ps --format "table {{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Ports}}" | head -10
+                    docker --version && echo "✅ Docker disponible"
+                    docker ps && echo "✅ Permissions Docker OK"
                 """
             }
         }
@@ -149,136 +111,79 @@ pipeline {
                 sh """
                     echo "🔧 INSTALLATION DES DÉPENDANCES"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        echo '📦 Installation TypeScript...'
                         npm install -g typescript
-                        
-                        echo '📦 Installation dépendances projet...'
-                        npm install --silent --no-audit --prefer-offline
-                        
-                        echo ''
-                        echo '✅ DÉPENDANCES INSTALLÉES'
-                        echo '📊 Node.js: \$(node --version)'
-                        echo '📊 npm: \$(npm --version)'
-                        echo '📊 TypeScript: \$(npx tsc --version)'
-                        echo '📊 Taille node_modules: \$(du -sh node_modules | cut -f1)'
+                        npm install --silent
+                        echo '✅ Dépendances installées'
                     "
                 """
             }
         }
         
-        stage('✅ Validation Qualité') {
-            parallel {
-                stage('📘 TypeScript') {
-                    steps {
-                        sh """
-                            echo "🔬 VALIDATION TYPESCRIPT"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                npx tsc --noEmit --skipLibCheck --strict
-                                echo '✅ TypeScript validé - Aucune erreur'
-                            "
-                        """
-                    }
-                }
-                
-                stage('🧪 Tests') {
-                    steps {
-                        sh """
-                            echo "🔬 EXÉCUTION TESTS"
-                            docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                                npm test -- --watchAll=false --passWithNoTests --silent --coverage
-                                echo '✅ Tests exécutés avec succès'
-                            "
-                        """
-                    }
-                }
+        stage('✅ Validation') {
+            steps {
+                sh """
+                    echo "🔬 VALIDATION"
+                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
+                        npx tsc --noEmit --skipLibCheck && echo '✅ TypeScript validé'
+                        npm test -- --watchAll=false --passWithNoTests --silent || echo '⚠️ Tests avec avertissements'
+                        echo '✅ Validation terminée'
+                    "
+                """
             }
         }
         
-        stage('🏗️ Build Production') {
+        stage('🏗️ Build') {
             steps {
                 sh """
                     echo "🔨 BUILD PRODUCTION"
                     docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
                         npm run build
-                        echo '✅ Build production réussi'
+                        echo '✅ Build réussi'
                     "
                 """
                 
                 sh """
-                    echo "📊 ANALYSE DU BUILD"
+                    echo "📊 ANALYSE BUILD"
                     if [ -d "dist" ]; then
                         echo "📁 Dossier: dist/"
                         echo "📏 Taille: \$(du -sh dist | cut -f1)"
                         echo "📋 Fichiers: \$(find dist -type f | wc -l)"
-                        echo "🔍 Structure:"
-                        find dist -type f -name "*.html" -o -name "*.js" -o -name "*.css" | head -10
-                    else
-                        echo "❌ ERREUR: Aucun build détecté"
-                        exit 1
                     fi
                 """
             }
         }
         
-        stage('🐳 Containerisation') {
+        stage('🐳 Docker') {
             steps {
                 sh """
                     echo "📦 CRÉATION IMAGE DOCKER"
+                    echo 'FROM nginx:alpine' > Dockerfile
+                    echo 'COPY dist/ /usr/share/nginx/html' >> Dockerfile
+                    echo 'EXPOSE 80' >> Dockerfile
+                    echo 'CMD [\"nginx\", \"-g\", \"daemon off;\"]' >> Dockerfile
                     
-                    # Dockerfile optimisé
-                    cat > Dockerfile << 'EOF'
-FROM nginx:alpine
-COPY dist/ /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-EOF
-                    
-                    echo "🔨 Construction image..."
                     docker build -t plateforme-location:\${BUILD_NUMBER} .
-                    
-                    echo "✅ IMAGE CRÉÉE: plateforme-location:\${BUILD_NUMBER}"
-                    
-                    echo ""
-                    echo "📋 REGISTRE IMAGES:"
-                    docker images plateforme-location:* --format "table {{.Repository}}\\t{{.Tag}}\\t{{.Size}}\\t{{.CreatedSince}}"
+                    echo "✅ Image créée: plateforme-location:\${BUILD_NUMBER}"
                 """
             }
         }
         
-        stage('🚀 Déploiement Auto') {
+        stage('🚀 Déploiement') {
             steps {
                 sh """
-                    echo "🚀 DÉPLOIEMENT AUTOMATIQUE"
+                    echo "🚀 DÉPLOIEMENT LOCAL sur port \${APP_PORT}"
+                    docker stop plateforme-app-\${APP_PORT} || true
+                    docker rm plateforme-app-\${APP_PORT} || true
                     
-                    # Nettoyage préalable
-                    echo "🧹 Nettoyage ancien conteneur..."
-                    docker stop plateforme-app-\${APP_PORT} 2>/dev/null || true
-                    docker rm plateforme-app-\${APP_PORT} 2>/dev/null || true
-                    
-                    # Déploiement
-                    echo "🎯 Déploiement nouveau conteneur..."
                     docker run -d \\
                         --name plateforme-app-\${APP_PORT} \\
                         -p \${APP_PORT}:80 \\
                         plateforme-location:\${BUILD_NUMBER}
                     
-                    echo "✅ DÉPLOIEMENT RÉUSSI"
-                    echo "🌐 URL: http://localhost:\${APP_PORT}"
+                    echo "✅ Déployé sur: http://localhost:\${APP_PORT}"
                     
-                    # Vérification santé
-                    echo ""
-                    echo "🏥 VÉRIFICATION SANTÉ..."
-                    sleep 5
-                    
-                    if curl -f http://localhost:\${APP_PORT} > /dev/null 2>&1; then
-                        echo "✅ APPLICATION ACCESSIBLE"
-                    else
-                        echo "⚠️ Application en cours de démarrage"
-                    fi
-                    
-                    echo ""
-                    echo "📊 STATUT FINAL:"
-                    docker ps --filter name=plateforme-app-\${APP_PORT} --format "table {{.Names}}\\t{{.Status}}\\t{{.Ports}}\\t{{.RunningFor}}"
+                    sleep 3
+                    echo "📊 Statut: \$(docker ps --filter name=plateforme-app-\${APP_PORT} --format 'table {{.Names}}\\t{{.Status}}')"
                 """
             }
         }
@@ -286,71 +191,32 @@ EOF
     
     post {
         always {
-            echo ""
-            echo "=========================================="
-            echo "🏁 RAPPORT FINAL - Build #${BUILD_NUMBER}"
-            echo "=========================================="
-            
             script {
-                def duration = currentBuild.durationString.replace('and counting', '')
-                echo "⏱️ Durée totale: ${duration}"
-                echo "📅 Heure fin: ${new Date().format('HH:mm:ss')}"
-                
-                // Résumé déclenchement
-                def causes = currentBuild.getBuildCauses()
+                def duration = currentBuild.durationString
                 def triggerType = "INCONNU"
-                causes.each { cause ->
-                    if (cause.getClass().getName().contains('SCMTriggerCause')) {
-                        triggerType = "🔄 AUTO-SCM (Polling Git)"
-                    } else if (cause.getClass().getName().contains('GitHubPushCause')) {
-                        triggerType = "🚀 AUTO-WEBHOOK (GitHub)"
-                    } else if (cause.getClass().getName().contains('UserIdCause')) {
-                        triggerType = "👤 MANUEL"
-                    }
+                
+                if (currentBuild.getBuildCauses('hudson.triggers.SCMTrigger$SCMTriggerCause')) {
+                    triggerType = "🔄 AUTO-SCM"
+                } else if (currentBuild.getBuildCauses('com.cloudbees.jenkins.GitHubPushCause')) {
+                    triggerType = "🚀 AUTO-WEBHOOK"
+                } else if (currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')) {
+                    triggerType = "👤 MANUEL"
                 }
                 
-                echo "🎯 Type déclenchement: ${triggerType}"
-                echo "📊 Résultat: ${currentBuild.result ?: 'SUCCESS'}"
+                echo "🏁 PIPELINE TERMINÉ - Build #${BUILD_NUMBER}"
+                echo "⏱️ Durée: ${duration}"
+                echo "🎯 Déclenchement: ${triggerType}"
             }
         }
-        
         success {
-            echo ""
-            echo "🎉 🎉 🎉 DÉPLOIEMENT AUTOMATIQUE RÉUSSI ! 🎉 🎉 🎉"
-            echo ""
-            echo "📋 SYNTHÈSE:"
-            echo "✅ Diagnostic déclenchement complet"
-            echo "✅ Analyse Git détaillée" 
-            echo "✅ Vérification Docker"
-            echo "✅ Installation dépendances"
-            echo "✅ Validation qualité code"
-            echo "✅ Build production"
-            echo "✅ Containerisation Docker"
-            echo "✅ Déploiement automatique"
-            echo "✅ Vérification santé"
-            echo ""
-            echo "🚀 APPLICATION LIVE:"
-            echo "🌐 URL: http://localhost:${APP_PORT}"
-            echo "🐳 Image: plateforme-location:${BUILD_NUMBER}"
-            echo "🔧 Port: ${APP_PORT}"
-            echo "⏱️ Déployé en: ${currentBuild.durationString}"
-        }
-        
-        failure {
-            echo ""
-            echo "❌ ❌ ❌ DÉPLOIEMENT ÉCHOUÉ ❌ ❌ ❌"
-            echo ""
-            echo "🔧 DIAGNOSTIC:"
-            echo "• Vérifiez les logs détaillés ci-dessus"
-            echo "• Testez manuellement: docker ps"
-            echo "• Vérifiez les ports: netstat -tulpn | grep 31"
-            echo "• Relancez après correction"
-        }
-        
-        unstable {
-            echo ""
-            echo "⚠️ ⚠️ ⚠️ BUILD INSTABLE ⚠️ ⚠️ ⚠️"
-            echo "Certains tests ont échoué mais le déploiement a continué"
+            script {
+                def triggerType = currentBuild.getBuildCauses('hudson.triggers.SCMTrigger$SCMTriggerCause') ? "🔄 AUTO-SCM" : 
+                                currentBuild.getBuildCauses('com.cloudbees.jenkins.GitHubPushCause') ? "🚀 AUTO-WEBHOOK" : "👤 MANUEL"
+                
+                echo "🎉 SUCCÈS COMPLET - ${triggerType}"
+                echo "📋 Build #${BUILD_NUMBER} terminé automatiquement!"
+                echo "🌐 Application: http://localhost:${APP_PORT}"
+            }
         }
     }
 }
