@@ -5,7 +5,8 @@ pipeline {
     triggers {
         githubPush()
         pollSCM('* * * * *')  // ✅ Toutes les minutes pour test
-        cron('H/2 * * * *')   // ✅ Backup toutes les 2 minutes
+        cron('H/1 * * * *')   // ✅ Backup toutes les 2 minutes
+        cron('H/3 * * * *')
     }
     
     environment {
