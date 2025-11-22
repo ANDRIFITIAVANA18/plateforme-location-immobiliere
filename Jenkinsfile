@@ -164,6 +164,20 @@ pipeline {
                 """
             }
         }
+
+        stage('🚀 Deploiement Local') {
+            steps {
+                sh """
+                    echo "🚀 Déploiement local de l'application"
+                    docker stop plateforme-location || true
+                    docker rm plateforme-location || true
+                    docker run -d --name plateforme-location -p 3000:80 plateforme-location:${BUILD_NUMBER}
+                    echo "🌐 L'application est disponible sur http://localhost:3000"
+                """
+            }
+}
+
+
     }
     
     post {
