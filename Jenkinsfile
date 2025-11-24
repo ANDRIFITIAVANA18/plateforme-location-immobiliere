@@ -3,16 +3,56 @@ pipeline {
     
     triggers {
         githubPush()
-        pollSCM('H/1 * * * *')
+        pollSCM('H/5 * * * *')
     }
     
     environment {
         NODE_ENV = 'production'
         CI = 'true'
-        APP_PORT = '3100'  // ✅ Port changé pour éviter les conflits
+        APP_PORT = '3100'
     }
     
     stages {
+        stage('🔧 Installation Node.js Automatique') {
+            steps {
+                sh '''
+                    echo "🔧 INSTALLATION AUTOMATIQUE DE NODE.JS"
+                    
+                    # Vérifier si Node.js est déjà installé
+                    if command -v node >/dev/null 2>&1; then
+                        echo "✅ Node.js déjà installé"
+                        echo "📊 Version: $(node --version)"
+                    else
+                        echo "📥 Installation de Node.js 18..."
+                        
+                        # Méthode 1: Utiliser le script officiel NodeSource
+                        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+                        apt-get update
+                        apt-get install -y nodejs
+                        
+                        # Vérification de l'installation
+                        if command -v node >/dev/null 2>&1; then
+                            echo "🎉 Node.js installé avec succès"
+                            echo "📊 Version: $(node --version)"
+                            echo "📊 npm Version: $(npm --version)"
+                        else
+                            echo "❌ Échec de l'installation automatique"
+                            echo "🔄 Tentative avec l'archive binaire..."
+                            
+                            # Méthode 2: Téléchargement direct
+                            wget -qO- https://nodejs.org/dist/v18.20.4/node-v18.20.4-linux-x64.tar.xz | tar -xJ -C /usr/local --strip-components=1
+                            ln -sf /usr/local/bin/node /usr/bin/node
+                            ln -sf /usr/local/bin/npm /usr/bin/npm
+                            
+                            echo "📊 Version: $(node --version)"
+                        fi
+                    fi
+                    
+                    echo "✅ Environnement Node.js prêt"
+                '''
+            }
+        }
+        
         stage('🔍 Analyse Git') {
             steps {
                 script {
@@ -30,142 +70,156 @@ pipeline {
                     echo "=========================================="
                     echo "🔍 ANALYSE GIT - Build #${BUILD_NUMBER}"
                     echo "=========================================="
-                    
                     echo "📝 Commit: \$(git log -1 --pretty=format:'%h - %s')"
                     echo "👤 Auteur: \$(git log -1 --pretty=format:'%an')" 
                     echo "🔀 Branche: \$(git branch --show-current)"
-                    
                     echo "📁 Fichiers modifiés:"
                     git diff --name-only HEAD~1 HEAD 2>/dev/null | head -10 || echo "Nouveau commit"
-                    
-                    echo "📦 Projet: \$(grep '\"name\"' package.json | head -1 | cut -d'\"' -f4)"
                 """
             }
         }
         
-        stage('🔧 Vérification Docker') {
+        stage('📥 Installation Dépendances') {
             steps {
-                sh """
-                    echo "🐳 VÉRIFICATION DOCKER"
-                    docker --version && echo "✅ Docker disponible"
-                    docker ps && echo "✅ Permissions Docker OK"
-                    
-                    echo "🔍 Vérification des ports:"
-                    echo "Port 3000: \$(docker ps --format 'table {{.Ports}}' | grep 3000 || echo 'Libre')"
-                    echo "Port ${APP_PORT}: \$(docker ps --format 'table {{.Ports}}' | grep ${APP_PORT} || echo 'Libre')"
-                """
-            }
-        }
-        
-        stage('📥 Installation') {
-            steps {
-                sh """
+                sh '''
                     echo "🔧 INSTALLATION DES DÉPENDANCES"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        # Installation de TypeScript globalement
-                        npm install -g typescript
-                        
-                        # Installation des dépendances du projet
-                        npm install --silent
-                        
-                        echo '✅ Dépendances installées'
-                        echo '📊 Node: \$(node --version)'
-                        echo '📊 npm: \$(npm --version)'
-                        echo '📊 TypeScript: \$(npx tsc --version)'
-                    "
-                """
-            }
-        }
-        
-        stage('✅ Validation') {
-            steps {
-                sh """
-                    echo "🔬 VALIDATION"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        # Validation TypeScript
-                        npx tsc --noEmit --skipLibCheck && echo '✅ TypeScript validé'
-                        
-                        # Tests (ignore les erreurs pour continuer)
-                        npm test -- --watchAll=false --passWithNoTests --silent || echo '⚠️ Tests avec avertissements'
-                        
-                        echo '✅ Validation terminée'
-                    "
-                """
-            }
-        }
-        
-        stage('🏗️ Build') {
-            steps {
-                sh """
-                    echo "🔨 BUILD PRODUCTION"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        npm run build
-                        echo '✅ Build réussi'
-                    "
-                """
-                
-                sh """
-                    echo "📊 ANALYSE BUILD"
-                    if [ -d "dist" ]; then
-                        echo "📁 Dossier: dist/"
-                        echo "📏 Taille: \$(du -sh dist | cut -f1)"
-                        echo "📋 Fichiers: \$(find dist -type f | wc -l)"
-                        echo "🔍 Contenu:"
-                        ls -la dist/
+                    
+                    # Vérification des outils
+                    echo "📊 Node: $(node --version)"
+                    echo "📊 npm: $(npm --version)"
+                    echo "📁 Répertoire: $(pwd)"
+                    
+                    # Nettoyage du cache npm
+                    npm cache clean --force || true
+                    
+                    # Installation selon le type de lockfile
+                    if [ -f "package-lock.json" ]; then
+                        echo "📦 Utilisation de package-lock.json"
+                        npm ci --silent --no-audit --prefer-offline
                     else
-                        echo "❌ Aucun build détecté"
+                        echo "📦 Installation standard"
+                        npm install --silent --no-audit --prefer-offline
+                    fi
+                    
+                    echo "✅ Dépendances principales installées"
+                    
+                    # Vérification de TypeScript
+                    if ! npx tsc --version >/dev/null 2>&1; then
+                        echo "📦 Installation de TypeScript..."
+                        npm install -g typescript
+                    fi
+                    
+                    echo "📊 TypeScript: $(npx tsc --version)"
+                    echo "🎉 Toutes les dépendances sont prêtes"
+                '''
+            }
+        }
+        
+        stage('✅ Validation TypeScript') {
+            steps {
+                sh '''
+                    echo "🔬 VALIDATION TYPESCRIPT"
+                    npx tsc --noEmit --skipLibCheck
+                    echo "✅ TypeScript validé - Aucune erreur de type"
+                '''
+            }
+        }
+        
+        stage('🧪 Exécution des Tests') {
+            steps {
+                sh '''
+                    echo "🧪 EXÉCUTION DES TESTS"
+                    
+                    # Configuration pour les tests CI
+                    export CI=true
+                    
+                    # Exécution des tests avec gestion d'erreur
+                    if [ -f "package.json" ] && grep -q '"test"' package.json; then
+                        npm test -- --watchAll=false --passWithNoTests --silent || echo "⚠️ Tests terminés avec avertissements"
+                    else
+                        echo "📝 Aucun script de test trouvé - continuation"
+                    fi
+                    
+                    echo "✅ Phase de tests terminée"
+                '''
+            }
+        }
+        
+        stage('🏗️ Build Production') {
+            steps {
+                sh '''
+                    echo "🔨 BUILD PRODUCTION"
+                    
+                    # Nettoyage des builds précédents
+                    rm -rf dist/ build/ out/
+                    
+                    # Build du projet
+                    npm run build
+                    
+                    echo "✅ Build terminé"
+                '''
+                
+                sh '''
+                    echo "📊 ANALYSE DU BUILD"
+                    if [ -d "dist" ]; then
+                        echo "📁 Dossier dist créé avec succès"
+                        echo "📏 Taille: $(du -sh dist | cut -f1)"
+                        echo "📋 Nombre de fichiers: $(find dist -type f | wc -l)"
+                        echo "🔍 Structure:"
+                        find dist -type f -name "*.html" -o -name "*.js" -o -name "*.css" | head -10
+                    elif [ -d "build" ]; then
+                        echo "📁 Dossier build créé avec succès"
+                        echo "📏 Taille: $(du -sh build | cut -f1)"
+                        echo "📋 Nombre de fichiers: $(find build -type f | wc -l)"
+                    else
+                        echo "❌ Aucun dossier de build détecté"
+                        echo "📁 Contenu actuel:"
+                        ls -la
                         exit 1
                     fi
-                """
+                '''
             }
         }
         
-        stage('🐳 Docker') {
+        stage('📦 Archivage des Artéfacts') {
             steps {
-                sh """
-                    echo "📦 CRÉATION IMAGE DOCKER"
+                sh '''
+                    echo "📦 CRÉATION DE L'ARCHIVE"
                     
-                    # Création du Dockerfile
-                    echo 'FROM nginx:alpine' > Dockerfile
-                    echo 'COPY dist/ /usr/share/nginx/html' >> Dockerfile
-                    echo 'EXPOSE 80' >> Dockerfile
-                    echo 'CMD [\"nginx\", \"-g\", \"daemon off;\"]' >> Dockerfile
+                    # Déterminer le dossier de build
+                    if [ -d "dist" ]; then
+                        BUILD_DIR="dist"
+                    elif [ -d "build" ]; then
+                        BUILD_DIR="build"
+                    else
+                        echo "❌ Aucun dossier de build trouvé"
+                        exit 1
+                    fi
                     
-                    docker build -t plateforme-location:\${BUILD_NUMBER} .
-                    echo "✅ Image créée: plateforme-location:\${BUILD_NUMBER}"
-                    
-                    # Liste des images
-                    echo "📋 Images disponibles:"
-                    docker images | grep plateforme-location
-                """
+                    # Création de l'archive
+                    tar -czf build-${BUILD_NUMBER}.tar.gz $BUILD_DIR/
+                    echo "✅ Archive créée: build-${BUILD_NUMBER}.tar.gz"
+                    echo "📏 Taille archive: $(du -h build-${BUILD_NUMBER}.tar.gz | cut -f1)"
+                '''
+                
+                // Archivage dans Jenkins
+                archiveArtifacts artifacts: 'build-*.tar.gz', fingerprint: true
             }
         }
         
-        stage('🚀 Déploiement') {
+        stage('🏁 Rapport Final') {
             steps {
-                sh """
-                    echo "🚀 DÉPLOIEMENT LOCAL sur port \${APP_PORT}"
-                    
-                    # Arrêt ancien conteneur (s'il existe)
-                    docker stop plateforme-app-\${APP_PORT} || true
-                    docker rm plateforme-app-\${APP_PORT} || true
-                    
-                    # Déploiement nouveau
-                    docker run -d \\
-                        --name plateforme-app-\${APP_PORT} \\
-                        -p \${APP_PORT}:80 \\
-                        plateforme-location:\${BUILD_NUMBER}
-                    
-                    echo "✅ Déployé sur: http://localhost:\${APP_PORT}"
-                    
-                    # Vérification
-                    sleep 3
-                    echo "📊 Statut conteneur:"
-                    docker ps --filter name=plateforme-app-\${APP_PORT} --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'
-                    
-                    echo "🔍 Test de santé:"
-                    curl -f http://localhost:\${APP_PORT} > /dev/null 2>&1 && echo "✅ Application accessible" || echo "⚠️ Application en démarrage"
-                """
+                sh '''
+                    echo "🏁 RAPPORT FINAL - BUILD #${BUILD_NUMBER}"
+                    echo "=========================================="
+                    echo "✅ Node.js: $(node --version)"
+                    echo "✅ npm: $(npm --version)"
+                    echo "✅ TypeScript: $(npx tsc --version)"
+                    echo "✅ Dépendances: installées"
+                    echo "✅ Build: production réussi"
+                    echo "✅ Archive: build-${BUILD_NUMBER}.tar.gz"
+                    echo "=========================================="
+                '''
             }
         }
     }
@@ -174,28 +228,24 @@ pipeline {
         always {
             echo "🏁 PIPELINE TERMINÉ - Build #${BUILD_NUMBER}"
             echo "⏱️ Durée: ${currentBuild.durationString}"
+            
+            // Nettoyage
+            sh '''
+                echo "🧹 NETTOYAGE"
+                rm -rf node_modules/.cache 2>/dev/null || true
+            '''
         }
         success {
             echo "🎉 SUCCÈS COMPLET !"
-            echo "📋 RAPPORT:"
-            echo "• ✅ Détection auto Git"
-            echo "• ✅ Docker fonctionnel" 
-            echo "• ✅ Dépendances installées"
-            echo "• ✅ Validation TypeScript"
-            echo "• ✅ Build production"
-            echo "• ✅ Image Docker créée"
-            echo "• ✅ Déploiement réussi"
-            echo ""
-            echo "🚀 APPLICATION DÉPLOYÉE:"
-            echo "🌐 URL: http://localhost:${APP_PORT}"
-            echo "🐳 Image: plateforme-location:${BUILD_NUMBER}"
-            echo "🔧 Port: ${APP_PORT}"
+            echo "📦 Artéfact archivé: build-${BUILD_NUMBER}.tar.gz"
+            echo "🔧 Prochaine étape: Déploiement de l'archive"
         }
         failure {
-            echo "❌ ÉCHEC - Diagnostic:"
-            echo "• Vérifiez les logs ci-dessus"
-            echo "• Testez: docker ps (vérifiez les ports utilisés)"
-            echo "• Relancez le build"
+            echo "❌ ÉCHEC - Points à vérifier:"
+            echo "• Connexion Internet pour npm"
+            • Configuration de package.json"
+            • Scripts de build dans package.json"
+            • Espace disque disponible"
         }
     }
 }
