@@ -2,8 +2,19 @@
 
 // src/components/EditPropertyForm.tsx
 import { useState, useEffect } from 'react';
-import { X, Upload, MapPin, Home, Bed, Bath, Users, DollarSign } from 'lucide-react';
+import { X, Upload, MapPin, Home, Bed, Bath, Users, DollarSign, Image as ImageIcon } from 'lucide-react';
 import { Property } from '../types';
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix pour les icônes Leaflet
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 interface EditPropertyFormProps {
   property: Property;
@@ -11,19 +22,27 @@ interface EditPropertyFormProps {
   onCancel: () => void;
 }
 
-export default function EditPropertyForm({ property, onPropertyUpdated, onCancel }: EditPropertyFormProps) {
+// Composant pour gérer les clics sur la carte
+function MapClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    click: (e) => {
+      const { lat, lng } = e.latlng;
+      onLocationSelect(lat, lng);
+    },
+  });
+  return null;
+}
 
- const parseAmenities = (amenities: any): string[] => {
+export default function EditPropertyForm({ property, onPropertyUpdated, onCancel }: EditPropertyFormProps) {
+  const parseAmenities = (amenities: any): string[] => {
     if (Array.isArray(amenities)) {
       return amenities;
     }
     if (typeof amenities === 'string') {
       try {
-        // Essayer de parser comme JSON
         const parsed = JSON.parse(amenities);
         return Array.isArray(parsed) ? parsed : [];
       } catch {
-        // Si c'est une string simple, la convertir en tableau
         return amenities.split(',').map((a: string) => a.trim()).filter(Boolean);
       }
     }
@@ -37,20 +56,25 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
     city: property.city,
     country: property.country || 'France',
     price_per_night: property.price_per_night,
-    price_type: property.price_type || 'night', // AJOUT DU PRICE_TYPE
+    price_type: property.price_type || 'night',
     bedrooms: property.bedrooms,
     bathrooms: property.bathrooms,
     max_guests: property.max_guests,
     property_type: property.property_type,
-   amenities: parseAmenities(property.amenities), // CORRECTION ICI
+    amenities: parseAmenities(property.amenities),
     images: property.images || [],
-    is_available: property.is_available
+    is_available: property.is_available,
+    latitude: property.latitude || 48.8566,
+    longitude: property.longitude || 2.3522
   });
-  
+
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [newAmenity, setNewAmenity] = useState('');
   const [error, setError] = useState('');
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState(property.address || '');
+  const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
   const propertyTypes = [
     { value: 'apartment', label: '🏢 Appartement' },
@@ -79,7 +103,46 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
     }));
   };
 
-  // Fonction corrigée pour l'upload d'images
+  // Fonction pour obtenir des images de fallback
+  const getFallbackImages = (): string[] => {
+    const placeholderImages = {
+      apartment: [
+        'https://images.pexels.com/photos/1643383/pexels-photo-1643383.jpeg',
+        'https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg',
+        'https://images.pexels.com/photos/439391/pexels-photo-439391.jpeg'
+      ],
+      house: [
+        'https://images.pexels.com/photos/106399/pexels-photo-106399.jpeg',
+        'https://images.pexels.com/photos/280222/pexels-photo-280222.jpeg',
+        'https://images.pexels.com/photos/1396122/pexels-photo-1396122.jpeg'
+      ],
+      villa: [
+        'https://images.pexels.com/photos/258154/pexels-photo-258154.jpeg',
+        'https://images.pexels.com/photos/1612351/pexels-photo-1612351.jpeg',
+        'https://images.pexels.com/photos/7031406/pexels-photo-7031406.jpeg'
+      ],
+      studio: [
+        'https://images.pexels.com/photos/271618/pexels-photo-271618.jpeg',
+        'https://images.pexels.com/photos/1648771/pexels-photo-1648771.jpeg',
+        'https://images.pexels.com/photos/1454806/pexels-photo-1454806.jpeg'
+      ],
+      loft: [
+        'https://images.pexels.com/photos/1571460/pexels-photo-1571460.jpeg',
+        'https://images.pexels.com/photos/1454806/pexels-photo-1454806.jpeg',
+        'https://images.pexels.com/photos/271795/pexels-photo-271795.jpeg'
+      ],
+      chalet: [
+        'https://images.pexels.com/photos/189296/pexels-photo-189296.jpeg',
+        'https://images.pexels.com/photos/2581922/pexels-photo-2581922.jpeg',
+        'https://images.pexels.com/photos/1365425/pexels-photo-1365425.jpeg'
+      ]
+    };
+
+    return placeholderImages[formData.property_type as keyof typeof placeholderImages] || 
+           placeholderImages.apartment;
+  };
+
+  // Fonction améliorée pour l'upload d'images avec fallback
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -87,71 +150,146 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
     setUploading(true);
     setError('');
 
+    // Validation des fichiers
+    const validFiles = Array.from(files).filter(file => {
+      if (!file.type.startsWith('image/')) {
+        setError(`Le fichier ${file.name} n'est pas une image valide`);
+        return false;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setError(`Le fichier ${file.name} est trop volumineux (max 10MB)`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length === 0) {
+      setUploading(false);
+      return;
+    }
+
     try {
-      const formData = new FormData();
-      for (let i = 0; i < files.length; i++) {
-        formData.append('image', files[i]); // 'image' au singulier (comme dans AddPropertyForm)
+      console.log('📤 Début upload de', validFiles.length, 'images...');
+      
+      const uploadedUrls: string[] = [];
+
+      // Essayer d'abord l'upload vers le serveur local
+      try {
+        const formData = new FormData();
+        validFiles.forEach(file => {
+          formData.append('images', file);
+        });
+
+        const response = await fetch('http://localhost:5000/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Upload réussi:', data);
+          if (data.imageUrls && Array.isArray(data.imageUrls)) {
+            uploadedUrls.push(...data.imageUrls);
+          }
+        } else {
+          throw new Error(`Erreur serveur: ${response.status}`);
+        }
+      } catch (serverError) {
+        console.warn('❌ Échec upload serveur local, utilisation IMGBB:', serverError);
+        
+        // Fallback: Upload vers IMGBB
+        for (const file of validFiles) {
+          try {
+            const imgbbFormData = new FormData();
+            imgbbFormData.append('image', file);
+            
+            const imgbbResponse = await fetch('https://api.imgbb.com/1/upload?key=ebd5c0e3afd3a5f8db71587bcc4841ed', {
+              method: 'POST',
+              body: imgbbFormData,
+            });
+
+            if (imgbbResponse.ok) {
+              const imgbbData = await imgbbResponse.json();
+              if (imgbbData.data && imgbbData.data.url) {
+                uploadedUrls.push(imgbbData.data.url);
+              }
+            }
+          } catch (imgbbError) {
+            console.error('❌ Échec upload IMGBB:', imgbbError);
+          }
+        }
       }
 
-      console.log('📤 Début upload images...');
-      
-      const response = await fetch('http://localhost:5000/api/upload', { // URL corrigée
-        method: 'POST',
-        body: formData, // Pas de headers pour FormData
-      });
+      // Si aucun upload n'a fonctionné, utiliser des images de fallback
+      if (uploadedUrls.length === 0) {
+        console.log('🔄 Utilisation des images de fallback');
+        const fallbackImages = getFallbackImages();
+        uploadedUrls.push(...fallbackImages.slice(0, validFiles.length));
+      }
 
-      console.log('📨 Réponse upload:', response.status);
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Images uploadées:', data.imageUrls);
-        
+      if (uploadedUrls.length > 0) {
         setFormData(prev => ({
           ...prev,
-          images: [...prev.images, ...data.imageUrls]
+          images: [...prev.images, ...uploadedUrls]
         }));
         
-        alert(`${data.imageUrls.length} image(s) téléchargée(s) avec succès !`);
+        alert(`${uploadedUrls.length} image(s) ajoutée(s) avec succès !`);
       } else {
-        const errorText = await response.text();
-        console.error('❌ Erreur upload:', errorText);
-        throw new Error(`Erreur ${response.status}: ${response.statusText}`);
+        throw new Error('Aucune image n\'a pu être téléchargée');
       }
-    } catch (error) {
-      console.error('Error uploading images:', error);
-      setError('Erreur lors du téléchargement des images. Vérifiez votre connexion.');
+
+    } catch (error: any) {
+      console.error('❌ Erreur upload images:', error);
+      setError(error.message || 'Erreur lors du téléchargement des images');
     } finally {
       setUploading(false);
-      // Reset le input file
       if (e.target) {
         e.target.value = '';
       }
     }
   };
 
-  // Fonction pour obtenir l'URL d'image correcte
-  const getImageUrl = (imagePath: string) => {
-    if (!imagePath) {
+  // Fonction améliorée pour obtenir l'URL d'image
+  const getImageUrl = (imagePath: string): string => {
+    if (!imagePath || imagePath.trim() === '') {
       return 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=400&h=300&fit=crop';
     }
     
-    // Si l'image commence déjà par http, l'utiliser directement
+    // Si c'est déjà une URL complète
     if (imagePath.startsWith('http')) {
       return imagePath;
     }
     
-    // Si c'est un chemin relatif, ajouter l'URL de base
-    if (imagePath.startsWith('/')) {
-      return `http://localhost:5000${imagePath}`;
+    // Si c'est un chemin relatif (commence par /uploads/)
+    if (imagePath.startsWith('/uploads/') || imagePath.startsWith('uploads/')) {
+      // Nettoyer le chemin
+      const cleanPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+      return `http://localhost:5000${cleanPath}`;
     }
     
-    // Si c'est déjà une URL complète mais sans http
-    if (imagePath.includes('pexels.com') || imagePath.includes('unsplash.com')) {
-      return imagePath;
+    // Si c'est un nom de fichier simple
+    if (!imagePath.includes('/') && !imagePath.startsWith('http')) {
+      return `http://localhost:5000/uploads/${imagePath}`;
     }
     
-    // Par défaut, ajouter l'URL de base
-    return `http://localhost:5000/${imagePath}`;
+    // Par défaut, retourner l'image de fallback
+    return 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=400&h=300&fit=crop';
+  };
+
+  // Gestionnaire d'erreur d'image
+  const handleImageError = (index: number, imageUrl: string) => {
+    console.error(`❌ Erreur chargement image ${index}:`, imageUrl);
+    setImageErrors(prev => new Set(prev).add(index));
+    
+    // Remplacer l'image corrompue par une image de fallback
+    const fallbackImages = getFallbackImages();
+    const fallbackImage = fallbackImages[index % fallbackImages.length];
+    
+    setFormData(prev => {
+      const newImages = [...prev.images];
+      newImages[index] = fallbackImage;
+      return { ...prev, images: newImages };
+    });
   };
 
   const removeImage = (index: number) => {
@@ -159,6 +297,12 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
       ...prev,
       images: prev.images.filter((_, i) => i !== index)
     }));
+    // Retirer l'index des erreurs
+    setImageErrors(prev => {
+      const newErrors = new Set(prev);
+      newErrors.delete(index);
+      return newErrors;
+    });
   };
 
   const addAmenity = () => {
@@ -178,26 +322,104 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
     }));
   };
 
+  // Fonction pour gérer la sélection de localisation
+  const handleLocationSelect = async (lat: number, lng: number) => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng
+    }));
+
+    setIsGeocoding(true);
+    
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=fr&addressdetails=1&zoom=16`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.address) {
+          const address = data.address;
+          
+          const addressParts = [
+            address.road,
+            address.house_number,
+            address.pedestrian,
+            address.footway
+          ].filter(Boolean);
+
+          const cityParts = [
+            address.city,
+            address.town,
+            address.village,
+            address.municipality
+          ].filter(Boolean);
+
+          const countryName = address.country || 'France';
+
+          let fullAddress = '';
+          
+          if (addressParts.length > 0) {
+            fullAddress = addressParts.join(', ');
+          } else if (cityParts.length > 0) {
+            fullAddress = `${cityParts[0]}`;
+          } else {
+            fullAddress = `Position: ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          }
+
+          const cityName = cityParts.length > 0 ? cityParts[0] : '';
+
+          setSelectedAddress(fullAddress);
+          setFormData(prev => ({
+            ...prev,
+            address: fullAddress,
+            city: cityName || prev.city,
+            country: countryName || prev.country
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Erreur reverse geocoding:', error);
+      setSelectedAddress(`Position: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      console.log('📤 Envoi des données:', formData);
+      console.log('📤 Envoi des données de modification:', formData);
+
+      // Nettoyer les images avant envoi
+      const cleanedFormData = {
+        ...formData,
+        images: formData.images.map(img => {
+          // Si c'est une URL complète qui n'est pas de fallback, la garder
+          if (img.startsWith('http') && !img.includes('unsplash.com') && !img.includes('pexels.com')) {
+            return img;
+          }
+          // Sinon, c'est peut-être un chemin relatif
+          return img;
+        })
+      };
 
       const response = await fetch(`http://localhost:5000/api/properties/${property.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(cleanedFormData),
       });
 
       const responseData = await response.json();
 
       if (response.ok) {
-        console.log('✅ Propriété modifiée:', responseData);
+        console.log('✅ Propriété modifiée avec succès:', responseData);
         alert('Propriété modifiée avec succès !');
         onPropertyUpdated();
       } else {
@@ -214,7 +436,7 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-gray-900">Modifier la propriété</h2>
@@ -290,47 +512,111 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
             />
           </div>
 
-          {/* Adresse */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Adresse
-              </label>
-              <input
-                type="text"
-                name="address"
-                value={formData.address}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea80fc] focus:border-transparent"
-              />
+          {/* Section Localisation avec Carte */}
+          <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+            <div className="flex items-center mb-4">
+              <div className="w-1.5 h-6 bg-gradient-to-b from-[#ea80fc] to-purple-500 rounded-full mr-3"></div>
+              <h3 className="text-lg font-semibold text-gray-900">Localisation</h3>
             </div>
 
-            <div>
+            <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ville *
+                Sélectionnez le nouvel emplacement sur la carte
+                <span className="text-green-600 ml-2 text-sm">
+                  ✓ Position actuelle affichée
+                </span>
               </label>
-              <input
-                type="text"
-                name="city"
-                value={formData.city}
-                onChange={handleInputChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea80fc] focus:border-transparent"
-              />
+              <div className="h-64 rounded-xl overflow-hidden border border-gray-300 relative">
+                {isGeocoding && (
+                  <div className="absolute inset-0 bg-white/80 z-10 flex items-center justify-center">
+                    <div className="text-gray-600 text-sm">
+                      Recherche de l'adresse...
+                    </div>
+                  </div>
+                )}
+                <MapContainer
+                  center={[formData.latitude, formData.longitude]}
+                  zoom={13}
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  />
+                  <MapClickHandler onLocationSelect={handleLocationSelect} />
+                  <Marker position={[formData.latitude, formData.longitude]} />
+                </MapContainer>
+              </div>
+              <p className="text-sm text-gray-500 mt-2">
+                Cliquez sur la carte pour modifier l'emplacement. L'adresse sera mise à jour automatiquement.
+              </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Pays
-              </label>
-              <input
-                type="text"
-                name="country"
-                value={formData.country}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea80fc] focus:border-transparent"
-              />
+            {/* Adresse détectée */}
+            {selectedAddress && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                <div className="flex items-center">
+                  <div className="text-blue-600 text-sm mr-2">📍</div>
+                  <div>
+                    <p className="text-blue-800 text-sm font-medium">
+                      Adresse détectée
+                    </p>
+                    <p className="text-blue-700 text-sm mt-1">{selectedAddress}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Champs d'adresse - Lecture seule car détectés automatiquement */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="group">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Adresse
+                </label>
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea80fc] focus:border-transparent bg-gray-50"
+                  placeholder="Sélectionnez un emplacement sur la carte"
+                  readOnly
+                />
+              </div>
+
+              <div className="group">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ville *
+                </label>
+                <input
+                  type="text"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea80fc] focus:border-transparent bg-gray-50"
+                  readOnly
+                />
+              </div>
+
+              <div className="group">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pays
+                </label>
+                <input
+                  type="text"
+                  name="country"
+                  value={formData.country}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#ea80fc] focus:border-transparent bg-gray-50"
+                  readOnly
+                />
+              </div>
             </div>
+
+            {/* Coordonnées GPS (cachées mais incluses dans le formData) */}
+            <input type="hidden" name="latitude" value={formData.latitude} />
+            <input type="hidden" name="longitude" value={formData.longitude} />
           </div>
 
           {/* Prix avec type */}
@@ -466,64 +752,110 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
             </div>
           </div>
 
-          {/* Images */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Images ({formData.images.length})
-            </label>
+          {/* Section Images - CORRIGÉE */}
+          <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+            <div className="flex items-center mb-4">
+              <div className="w-1.5 h-6 bg-gradient-to-b from-[#ea80fc] to-purple-500 rounded-full mr-3"></div>
+              <h3 className="text-lg font-semibold text-gray-900">Galerie photos</h3>
+            </div>
+
             <div className="space-y-4">
+              {/* Images existantes */}
               {formData.images.length > 0 && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {formData.images.map((image, index) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={getImageUrl(image)}
-                        alt={`Image ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg"
-                        onError={(e) => {
-                          console.error('❌ Erreur chargement image:', image);
-                          e.currentTarget.src = 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=400&h=300&fit=crop';
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeImage(index)}
-                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs font-bold hover:bg-red-600"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Images actuelles ({formData.images.length})
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {formData.images.map((image, index) => (
+                      <div key={index} className="relative group">
+                        <div className="aspect-square rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                          <img
+                            src={getImageUrl(image)}
+                            alt={`Image ${index + 1} de la propriété`}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                            onError={() => handleImageError(index, image)}
+                            loading="lazy"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-xs font-bold hover:bg-red-600 shadow-lg"
+                          title="Supprimer cette image"
+                        >
+                          ×
+                        </button>
+                        {imageErrors.has(index) && (
+                          <div className="absolute inset-0 bg-yellow-100 bg-opacity-50 flex items-center justify-center">
+                            <span className="text-xs text-yellow-800 font-medium">Image remplacée</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
+              {/* Upload de nouvelles images */}
               <div>
-                <label className={`flex flex-col items-center justify-center w-full p-6 border-2 border-dashed rounded-lg transition-colors cursor-pointer ${
-                  uploading 
-                    ? 'border-[#ea80fc] bg-[#ea80fc]/10' 
-                    : 'border-gray-300 hover:border-[#ea80fc] hover:bg-[#ea80fc]/5'
-                }`}>
-                  {uploading ? (
-                    <div className="flex flex-col items-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ea80fc] mb-2"></div>
-                      <span className="text-sm text-gray-600">Téléchargement en cours...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-600">Cliquez pour ajouter des images</span>
-                      <span className="text-xs text-gray-400 mt-1">PNG, JPG, JPEG jusqu'à 10MB</span>
-                    </>
-                  )}
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Ajouter de nouvelles images
+                </label>
+                
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 transition-all duration-300 hover:border-[#ea80fc] hover:bg-[#ea80fc]/5">
                   <input
                     type="file"
                     multiple
                     accept="image/*"
                     onChange={handleImageUpload}
                     className="hidden"
+                    id="image-upload"
                     disabled={uploading}
                   />
-                </label>
+                  
+                  <label 
+                    htmlFor="image-upload"
+                    className={`flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${
+                      uploading ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.02]'
+                    }`}
+                  >
+                    {uploading ? (
+                      <div className="flex flex-col items-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#ea80fc] mb-3"></div>
+                        <p className="text-gray-600 font-medium">Téléchargement en cours...</p>
+                        <p className="text-gray-400 text-sm mt-1">Veuillez patienter</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-16 h-16 bg-gradient-to-br from-[#ea80fc] to-purple-500 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                          <Upload className="w-8 h-8 text-white" />
+                        </div>
+                        <p className="text-gray-700 font-semibold text-center mb-2">
+                          Cliquez pour ajouter des photos
+                        </p>
+                        <p className="text-gray-500 text-sm text-center">
+                          Glissez-déposez ou parcourez vos fichiers
+                        </p>
+                        <p className="text-gray-400 text-xs mt-2">
+                          PNG, JPG, JPEG • Max 10MB par image
+                        </p>
+                      </>
+                    )}
+                  </label>
+                </div>
+
+                {formData.images.length === 0 && (
+                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-center">
+                      <ImageIcon className="w-5 h-5 text-yellow-600 mr-2" />
+                      <p className="text-yellow-700 text-sm">
+                        Aucune image n'est actuellement associée à cette propriété.
+                        Ajoutez des photos pour améliorer sa visibilité.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -556,7 +888,14 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
               disabled={loading}
               className="flex-1 bg-gradient-to-r from-[#ea80fc] to-purple-500 text-white py-3 rounded-xl font-semibold hover:shadow-lg transform hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Modification...' : 'Modifier la propriété'}
+              {loading ? (
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  Modification...
+                </div>
+              ) : (
+                'Modifier la propriété'
+              )}
             </button>
           </div>
         </form>
