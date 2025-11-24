@@ -3,13 +3,13 @@ pipeline {
     
     triggers {
         githubPush()
-        pollSCM('H/1 * * * *')
+        pollSCM('H/5 * * * *')  // Réduit à 5 min pour moins de charge
     }
     
     environment {
         NODE_ENV = 'production'
         CI = 'true'
-        APP_PORT = '3100'  // ✅ Port changé pour éviter les conflits
+        APP_PORT = '3100'
     }
     
     stages {
@@ -30,49 +30,51 @@ pipeline {
                     echo "=========================================="
                     echo "🔍 ANALYSE GIT - Build #${BUILD_NUMBER}"
                     echo "=========================================="
-                    
                     echo "📝 Commit: \$(git log -1 --pretty=format:'%h - %s')"
                     echo "👤 Auteur: \$(git log -1 --pretty=format:'%an')" 
                     echo "🔀 Branche: \$(git branch --show-current)"
-                    
                     echo "📁 Fichiers modifiés:"
                     git diff --name-only HEAD~1 HEAD 2>/dev/null | head -10 || echo "Nouveau commit"
-                    
-                    echo "📦 Projet: \$(grep '\"name\"' package.json | head -1 | cut -d'\"' -f4)"
                 """
             }
         }
         
-        stage('🔧 Vérification Docker') {
+        stage('🔧 Vérification Environnement') {
             steps {
                 sh """
-                    echo "🐳 VÉRIFICATION DOCKER"
+                    echo "🐳 VÉRIFICATION DOCKER & NODE"
                     docker --version && echo "✅ Docker disponible"
-                    docker ps && echo "✅ Permissions Docker OK"
+                    node --version && echo "✅ Node.js disponible" || echo "❌ Node.js manquant"
+                    npm --version && echo "✅ NPM disponible" || echo "❌ NPM manquant"
                     
-                    echo "🔍 Vérification des ports:"
-                    echo "Port 3000: \$(docker ps --format 'table {{.Ports}}' | grep 3000 || echo 'Libre')"
-                    echo "Port ${APP_PORT}: \$(docker ps --format 'table {{.Ports}}' | grep ${APP_PORT} || echo 'Libre')"
+                    echo "🔍 Ports utilisés:"
+                    netstat -tulpn | grep ":${APP_PORT}" || echo "✅ Port ${APP_PORT} libre"
                 """
             }
         }
         
-        stage('📥 Installation') {
+        stage('📥 Installation Dépendances') {
             steps {
                 sh """
                     echo "🔧 INSTALLATION DES DÉPENDANCES"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        # Installation de TypeScript globalement
-                        npm install -g typescript
-                        
-                        # Installation des dépendances du projet
-                        npm install --silent
-                        
-                        echo '✅ Dépendances installées'
-                        echo '📊 Node: \$(node --version)'
-                        echo '📊 npm: \$(npm --version)'
-                        echo '📊 TypeScript: \$(npx tsc --version)'
-                    "
+                    echo "📊 Version Node: \$(node --version)"
+                    echo "📊 Version NPM: \$(npm --version)"
+                    
+                    # Installation plus simple et robuste
+                    npm ci --silent --no-audit --prefer-offline
+                    
+                    # TypeScript en local (recommandé)
+                    npm install typescript --save-dev --silent
+                    
+                    echo "✅ Dépendances installées"
+                    echo "📦 TypeScript: \$(npx tsc --version)"
+                """
+                
+                // Vérification de l'installation
+                sh """
+                    echo "🔍 VÉRIFICATION INSTALLATION"
+                    ls -la node_modules/ | head -5
+                    echo "📁 Taille node_modules: \$(du -sh node_modules | cut -f1)"
                 """
             }
         }
@@ -80,63 +82,72 @@ pipeline {
         stage('✅ Validation') {
             steps {
                 sh """
-                    echo "🔬 VALIDATION"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        # Validation TypeScript
-                        npx tsc --noEmit --skipLibCheck && echo '✅ TypeScript validé'
-                        
-                        # Tests (ignore les erreurs pour continuer)
-                        npm test -- --watchAll=false --passWithNoTests --silent || echo '⚠️ Tests avec avertissements'
-                        
-                        echo '✅ Validation terminée'
-                    "
+                    echo "🔬 VALIDATION CODE"
+                    
+                    # Validation TypeScript
+                    npx tsc --noEmit --skipLibCheck
+                    echo "✅ TypeScript validé"
+                    
+                    # Tests avec timeout
+                    timeout(time: 2, unit: 'MINUTES') {
+                        npm test -- --watchAll=false --passWithNoTests --silent || echo "⚠️ Tests avec avertissements"
+                    }
+                    
+                    echo "✅ Validation terminée"
                 """
             }
         }
         
-        stage('🏗️ Build') {
+        stage('🏗️ Build Production') {
             steps {
                 sh """
                     echo "🔨 BUILD PRODUCTION"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        npm run build
-                        echo '✅ Build réussi'
-                    "
+                    
+                    # Nettoyage préalable
+                    rm -rf dist/ build/
+                    
+                    # Build
+                    npm run build
+                    
+                    echo "✅ Build réussi"
                 """
                 
                 sh """
                     echo "📊 ANALYSE BUILD"
                     if [ -d "dist" ]; then
-                        echo "📁 Dossier: dist/"
+                        echo "📁 Dossier dist créé"
                         echo "📏 Taille: \$(du -sh dist | cut -f1)"
                         echo "📋 Fichiers: \$(find dist -type f | wc -l)"
-                        echo "🔍 Contenu:"
-                        ls -la dist/
+                        echo "🔍 Contenu principal:"
+                        ls -la dist/ | head -10
                     else
-                        echo "❌ Aucun build détecté"
+                        echo "❌ Aucun build détecté - vérification alternative:"
+                        ls -la | grep -E "(build|dist|out)"
                         exit 1
                     fi
                 """
             }
         }
         
-        stage('🐳 Docker') {
+        stage('🐳 Construction Docker') {
             steps {
                 sh """
                     echo "📦 CRÉATION IMAGE DOCKER"
                     
-                    # Création du Dockerfile
-                    echo 'FROM nginx:alpine' > Dockerfile
-                    echo 'COPY dist/ /usr/share/nginx/html' >> Dockerfile
-                    echo 'EXPOSE 80' >> Dockerfile
-                    echo 'CMD [\"nginx\", \"-g\", \"daemon off;\"]' >> Dockerfile
+                    # Création du Dockerfile optimisé
+                    cat > Dockerfile << EOF
+FROM nginx:alpine
+COPY dist/ /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+EOF
                     
-                    docker build -t plateforme-location:\${BUILD_NUMBER} .
-                    echo "✅ Image créée: plateforme-location:\${BUILD_NUMBER}"
+                    echo "🔍 Contenu Dockerfile:"
+                    cat Dockerfile
                     
-                    # Liste des images
-                    echo "📋 Images disponibles:"
-                    docker images | grep plateforme-location
+                    # Construction de l'image
+                    docker build -t plateforme-location:${BUILD_NUMBER} .
+                    echo "✅ Image créée: plateforme-location:${BUILD_NUMBER}"
                 """
             }
         }
@@ -144,27 +155,32 @@ pipeline {
         stage('🚀 Déploiement') {
             steps {
                 sh """
-                    echo "🚀 DÉPLOIEMENT LOCAL sur port \${APP_PORT}"
+                    echo "🚀 DÉPLOIEMENT SUR PORT ${APP_PORT}"
                     
-                    # Arrêt ancien conteneur (s'il existe)
-                    docker stop plateforme-app-\${APP_PORT} || true
-                    docker rm plateforme-app-\${APP_PORT} || true
+                    # Arrêt propre de l'ancien conteneur
+                    docker stop plateforme-app-${APP_PORT} 2>/dev/null || echo "✅ Aucun conteneur à arrêter"
+                    docker rm plateforme-app-${APP_PORT} 2>/dev/null || echo "✅ Aucun conteneur à supprimer"
                     
                     # Déploiement nouveau
                     docker run -d \\
-                        --name plateforme-app-\${APP_PORT} \\
-                        -p \${APP_PORT}:80 \\
-                        plateforme-location:\${BUILD_NUMBER}
+                        --name plateforme-app-${APP_PORT} \\
+                        -p ${APP_PORT}:80 \\
+                        plateforme-location:${BUILD_NUMBER}
                     
-                    echo "✅ Déployé sur: http://localhost:\${APP_PORT}"
+                    echo "✅ Conteneur démarré"
                     
-                    # Vérification
-                    sleep 3
+                    # Attente et vérification
+                    sleep 5
                     echo "📊 Statut conteneur:"
-                    docker ps --filter name=plateforme-app-\${APP_PORT} --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'
+                    docker ps --filter name=plateforme-app-${APP_PORT} --format 'table {{.Names}}\\t{{.Status}}'
                     
-                    echo "🔍 Test de santé:"
-                    curl -f http://localhost:\${APP_PORT} > /dev/null 2>&1 && echo "✅ Application accessible" || echo "⚠️ Application en démarrage"
+                    echo "🔍 Test de santé..."
+                    if curl -s http://localhost:${APP_PORT} > /dev/null; then
+                        echo "🎉 APPLICATION ACCESSIBLE: http://localhost:${APP_PORT}"
+                    else
+                        echo "⚠️ Application en cours de démarrage..."
+                        docker logs plateforme-app-${APP_PORT} --tail 10
+                    fi
                 """
             }
         }
@@ -174,28 +190,26 @@ pipeline {
         always {
             echo "🏁 PIPELINE TERMINÉ - Build #${BUILD_NUMBER}"
             echo "⏱️ Durée: ${currentBuild.durationString}"
+            
+            // Nettoyage des ressources
+            sh """
+                echo "🧹 NETTOYAGE"
+                docker ps -a | grep plateforme-app || echo "✅ Aucun conteneur à nettoyer"
+            """
         }
         success {
             echo "🎉 SUCCÈS COMPLET !"
-            echo "📋 RAPPORT:"
-            echo "• ✅ Détection auto Git"
-            echo "• ✅ Docker fonctionnel" 
-            echo "• ✅ Dépendances installées"
-            echo "• ✅ Validation TypeScript"
-            echo "• ✅ Build production"
-            echo "• ✅ Image Docker créée"
-            echo "• ✅ Déploiement réussi"
-            echo ""
-            echo "🚀 APPLICATION DÉPLOYÉE:"
             echo "🌐 URL: http://localhost:${APP_PORT}"
             echo "🐳 Image: plateforme-location:${BUILD_NUMBER}"
-            echo "🔧 Port: ${APP_PORT}"
         }
         failure {
-            echo "❌ ÉCHEC - Diagnostic:"
-            echo "• Vérifiez les logs ci-dessus"
-            echo "• Testez: docker ps (vérifiez les ports utilisés)"
-            echo "• Relancez le build"
+            echo "❌ ÉCHEC - Diagnostic rapide:"
+            sh """
+                echo "🔍 Logs récents:"
+                docker logs plateforme-app-${APP_PORT} --tail 20 2>/dev/null || echo "Aucun conteneur trouvé"
+                echo "📊 Conteneurs actifs:"
+                docker ps --format 'table {{.Names}}\\t{{.Status}}'
+            """
         }
     }
 }
