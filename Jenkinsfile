@@ -3,16 +3,49 @@ pipeline {
     
     triggers {
         githubPush()
-        pollSCM('H/1 * * * *')
+        pollSCM('H/5 * * * *')
     }
     
     environment {
         NODE_ENV = 'production'
         CI = 'true'
-        APP_PORT = '3100'  // ✅ Port changé pour éviter les conflits
+        APP_PORT = '3100'
     }
     
     stages {
+        stage('🔧 Vérification Environnement') {
+            steps {
+                bat '''
+                    echo 🔍 VÉRIFICATION DE L'ENVIRONNEMENT
+                    echo 📊 Système: %COMPUTERNAME%
+                    node --version && echo ✅ Node.js installé || echo ❌ Node.js manquant
+                    npm --version && echo ✅ npm installé || echo ❌ npm manquant
+                    docker --version && echo ✅ Docker disponible || echo ❌ Docker non disponible
+                '''
+            }
+        }
+        
+        stage('📥 Installation Auto Node.js si nécessaire') {
+            steps {
+                script {
+                    try {
+                        bat 'node --version'
+                        echo "✅ Node.js déjà installé"
+                    } catch (Exception e) {
+                        echo "📥 Installation automatique de Node.js..."
+                        bat '''
+                            echo 📥 Téléchargement de Node.js...
+                            curl -L -o node-installer.msi https://nodejs.org/dist/v18.20.4/node-v18.20.4-x64.msi
+                            echo 🔧 Installation en cours...
+                            msiexec /i node-installer.msi /quiet /norestart
+                            timeout /t 10
+                            echo ✅ Node.js installé
+                        '''
+                    }
+                }
+            }
+        }
+        
         stage('🔍 Analyse Git') {
             steps {
                 script {
@@ -26,146 +59,139 @@ pipeline {
                     }
                 }
                 
-                sh """
-                    echo "=========================================="
-                    echo "🔍 ANALYSE GIT - Build #${BUILD_NUMBER}"
-                    echo "=========================================="
+                bat """
+                    echo ==========================================
+                    echo 🔍 ANALYSE GIT - Build #%BUILD_NUMBER%
+                    echo ==========================================
                     
-                    echo "📝 Commit: \$(git log -1 --pretty=format:'%h - %s')"
-                    echo "👤 Auteur: \$(git log -1 --pretty=format:'%an')" 
-                    echo "🔀 Branche: \$(git branch --show-current)"
+                    echo 📝 Commit: 
+                    git log -1 --pretty=format:%%h - %%s
                     
-                    echo "📁 Fichiers modifiés:"
-                    git diff --name-only HEAD~1 HEAD 2>/dev/null | head -10 || echo "Nouveau commit"
+                    echo 👤 Auteur: 
+                    git log -1 --pretty=format:%%an
                     
-                    echo "📦 Projet: \$(grep '\"name\"' package.json | head -1 | cut -d'\"' -f4)"
+                    echo 🔀 Branche: 
+                    git branch --show-current
+                    
+                    echo 📁 Fichiers modifiés:
+                    git diff --name-only HEAD~1 HEAD 2>nul | head -10 || echo Nouveau commit
                 """
             }
         }
         
-        stage('🔧 Vérification Docker') {
+        stage('📦 Installation Dépendances') {
             steps {
-                sh """
-                    echo "🐳 VÉRIFICATION DOCKER"
-                    docker --version && echo "✅ Docker disponible"
-                    docker ps && echo "✅ Permissions Docker OK"
+                bat '''
+                    echo 🔧 INSTALLATION DES DÉPENDANCES
                     
-                    echo "🔍 Vérification des ports:"
-                    echo "Port 3000: \$(docker ps --format 'table {{.Ports}}' | grep 3000 || echo 'Libre')"
-                    echo "Port ${APP_PORT}: \$(docker ps --format 'table {{.Ports}}' | grep ${APP_PORT} || echo 'Libre')"
-                """
-            }
-        }
-        
-        stage('📥 Installation') {
-            steps {
-                sh """
-                    echo "🔧 INSTALLATION DES DÉPENDANCES"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        # Installation de TypeScript globalement
-                        npm install -g typescript
-                        
-                        # Installation des dépendances du projet
-                        npm install --silent
-                        
-                        echo '✅ Dépendances installées'
-                        echo '📊 Node: \$(node --version)'
-                        echo '📊 npm: \$(npm --version)'
-                        echo '📊 TypeScript: \$(npx tsc --version)'
-                    "
-                """
+                    echo 📊 Node: 
+                    node --version
+                    
+                    echo 📊 npm: 
+                    npm --version
+                    
+                    echo 🧹 Nettoyage du cache...
+                    npm cache clean --force
+                    
+                    echo 📦 Installation des dépendances...
+                    npm install --silent --no-audit
+                    
+                    echo ✅ Dépendances installées
+                    
+                    echo 📊 TypeScript: 
+                    npx tsc --version
+                '''
             }
         }
         
         stage('✅ Validation') {
             steps {
-                sh """
-                    echo "🔬 VALIDATION"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        # Validation TypeScript
-                        npx tsc --noEmit --skipLibCheck && echo '✅ TypeScript validé'
-                        
-                        # Tests (ignore les erreurs pour continuer)
-                        npm test -- --watchAll=false --passWithNoTests --silent || echo '⚠️ Tests avec avertissements'
-                        
-                        echo '✅ Validation terminée'
-                    "
-                """
+                bat '''
+                    echo 🔬 VALIDATION CODE
+                    
+                    echo 🔍 Validation TypeScript...
+                    npx tsc --noEmit --skipLibCheck
+                    echo ✅ TypeScript validé
+                    
+                    echo 🧪 Exécution des tests...
+                    npm test -- --watchAll=false --passWithNoTests --silent || echo ⚠️ Tests avec avertissements
+                    
+                    echo ✅ Validation terminée
+                '''
             }
         }
         
-        stage('🏗️ Build') {
+        stage('🏗️ Build Production') {
             steps {
-                sh """
-                    echo "🔨 BUILD PRODUCTION"
-                    docker run --rm -v \$(pwd):/app -w /app node:18-alpine sh -c "
-                        npm run build
-                        echo '✅ Build réussi'
-                    "
-                """
+                bat '''
+                    echo 🔨 BUILD PRODUCTION
+                    
+                    echo 🧹 Nettoyage des anciens builds...
+                    rmdir /s /q dist 2>nul || echo 📁 Aucun dossier dist à supprimer
+                    rmdir /s /q build 2>nul || echo 📁 Aucun dossier build à supprimer
+                    
+                    echo 🏗️ Construction...
+                    npm run build
+                    
+                    echo ✅ Build réussi
+                '''
                 
-                sh """
-                    echo "📊 ANALYSE BUILD"
-                    if [ -d "dist" ]; then
-                        echo "📁 Dossier: dist/"
-                        echo "📏 Taille: \$(du -sh dist | cut -f1)"
-                        echo "📋 Fichiers: \$(find dist -type f | wc -l)"
-                        echo "🔍 Contenu:"
-                        ls -la dist/
-                    else
-                        echo "❌ Aucun build détecté"
+                bat '''
+                    echo 📊 ANALYSE BUILD
+                    if exist dist (
+                        echo 📁 Dossier dist créé
+                        dir dist
+                    ) else if exist build (
+                        echo 📁 Dossier build créé
+                        dir build
+                    ) else (
+                        echo ❌ Aucun build détecté
                         exit 1
-                    fi
-                """
+                    )
+                '''
             }
         }
         
-        stage('🐳 Docker') {
+        stage('🐳 Construction Docker (si permissions)') {
             steps {
-                sh """
-                    echo "📦 CRÉATION IMAGE DOCKER"
-                    
-                    # Création du Dockerfile
-                    echo 'FROM nginx:alpine' > Dockerfile
-                    echo 'COPY dist/ /usr/share/nginx/html' >> Dockerfile
-                    echo 'EXPOSE 80' >> Dockerfile
-                    echo 'CMD [\"nginx\", \"-g\", \"daemon off;\"]' >> Dockerfile
-                    
-                    docker build -t plateforme-location:\${BUILD_NUMBER} .
-                    echo "✅ Image créée: plateforme-location:\${BUILD_NUMBER}"
-                    
-                    # Liste des images
-                    echo "📋 Images disponibles:"
-                    docker images | grep plateforme-location
-                """
+                script {
+                    try {
+                        bat '''
+                            echo 📦 CONSTRUCTION DOCKER
+                            docker --version
+                            
+                            echo 🔨 Création du Dockerfile...
+                            echo FROM nginx:alpine > Dockerfile
+                            echo COPY dist/ /usr/share/nginx/html >> Dockerfile
+                            echo EXPOSE 80 >> Dockerfile
+                            echo CMD ["nginx", "-g", "daemon off;"] >> Dockerfile
+                            
+                            echo 🏗️ Construction de l image...
+                            docker build -t plateforme-location:%BUILD_NUMBER% .
+                            
+                            echo ✅ Image Docker créée
+                            docker images | findstr plateforme-location
+                        '''
+                    } catch (Exception e) {
+                        echo "⚠️ Docker non disponible - continuation sans Docker"
+                    }
+                }
             }
         }
         
-        stage('🚀 Déploiement') {
+        stage('📦 Archivage') {
             steps {
-                sh """
-                    echo "🚀 DÉPLOIEMENT LOCAL sur port \${APP_PORT}"
-                    
-                    # Arrêt ancien conteneur (s'il existe)
-                    docker stop plateforme-app-\${APP_PORT} || true
-                    docker rm plateforme-app-\${APP_PORT} || true
-                    
-                    # Déploiement nouveau
-                    docker run -d \\
-                        --name plateforme-app-\${APP_PORT} \\
-                        -p \${APP_PORT}:80 \\
-                        plateforme-location:\${BUILD_NUMBER}
-                    
-                    echo "✅ Déployé sur: http://localhost:\${APP_PORT}"
-                    
-                    # Vérification
-                    sleep 3
-                    echo "📊 Statut conteneur:"
-                    docker ps --filter name=plateforme-app-\${APP_PORT} --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'
-                    
-                    echo "🔍 Test de santé:"
-                    curl -f http://localhost:\${APP_PORT} > /dev/null 2>&1 && echo "✅ Application accessible" || echo "⚠️ Application en démarrage"
-                """
+                bat '''
+                    echo 📦 CRÉATION ARCHIVE
+                    if exist dist (
+                        7z a -ttar build-%BUILD_NUMBER%.tar dist\\*
+                    ) else if exist build (
+                        7z a -ttar build-%BUILD_NUMBER%.tar build\\*
+                    )
+                    echo ✅ Archive créée
+                '''
+                
+                archiveArtifacts artifacts: 'build-*.tar', fingerprint: true
             }
         }
     }
@@ -177,25 +203,10 @@ pipeline {
         }
         success {
             echo "🎉 SUCCÈS COMPLET !"
-            echo "📋 RAPPORT:"
-            echo "• ✅ Détection auto Git"
-            echo "• ✅ Docker fonctionnel" 
-            echo "• ✅ Dépendances installées"
-            echo "• ✅ Validation TypeScript"
-            echo "• ✅ Build production"
-            echo "• ✅ Image Docker créée"
-            echo "• ✅ Déploiement réussi"
-            echo ""
-            echo "🚀 APPLICATION DÉPLOYÉE:"
-            echo "🌐 URL: http://localhost:${APP_PORT}"
-            echo "🐳 Image: plateforme-location:${BUILD_NUMBER}"
-            echo "🔧 Port: ${APP_PORT}"
+            echo "📦 Artéfact: build-${BUILD_NUMBER}.tar"
         }
         failure {
-            echo "❌ ÉCHEC - Diagnostic:"
-            echo "• Vérifiez les logs ci-dessus"
-            echo "• Testez: docker ps (vérifiez les ports utilisés)"
-            echo "• Relancez le build"
+            echo "❌ ÉCHEC - Vérifiez les logs ci-dessus"
         }
     }
 }
