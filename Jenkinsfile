@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:18-alpine'
-            args '-u root:root -v /var/run/docker.sock:/var/run/docker.sock'
-        }
-    }
+    agent any
     
     triggers {
         githubPush()
@@ -18,6 +13,28 @@ pipeline {
     }
     
     stages {
+        stage('🔧 Préparation Environnement') {
+            steps {
+                sh '''
+                    echo "🔧 CONFIGURATION DE L'ENVIRONNEMENT"
+                    echo "📊 Système: $(uname -a)"
+                    echo "📁 Répertoire: $PWD"
+                    echo "👤 Utilisateur: $(whoami)"
+                    
+                    # Installation de Node.js si absent
+                    if ! command -v node &> /dev/null; then
+                        echo "📥 Installation de Node.js..."
+                        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+                        apt-get install -y nodejs
+                    fi
+                    
+                    echo "✅ Environnement prêt"
+                    echo "📊 Node: $(node --version)"
+                    echo "📊 npm: $(npm --version)"
+                '''
+            }
+        }
+        
         stage('🔍 Analyse Git') {
             steps {
                 script {
@@ -40,62 +57,59 @@ pipeline {
                     echo "🔀 Branche: \$(git branch --show-current)"
                     echo "📁 Fichiers modifiés:"
                     git diff --name-only HEAD~1 HEAD 2>/dev/null | head -10 || echo "Nouveau commit"
-                """
-            }
-        }
-        
-        stage('🔧 Vérification Environnement') {
-            steps {
-                sh """
-                    echo "🔧 ENVIRONNEMENT DE BUILD"
-                    echo "📊 Node: \$(node --version)"
-                    echo "📊 npm: \$(npm --version)"
-                    echo "🐳 Docker: \$(docker --version)"
-                    echo "👤 User: \$(whoami)"
-                    echo "📁 Workspace: \$PWD"
+                    echo "📦 Projet: \$(grep '\"name\"' package.json | head -1 | cut -d'\"' -f4)"
                 """
             }
         }
         
         stage('📥 Installation Dépendances') {
             steps {
-                sh """
+                sh '''
                     echo "🔧 INSTALLATION DES DÉPENDANCES"
                     
-                    # Installation plus rapide et fiable
-                    npm ci --silent --no-audit
+                    # Nettoyage cache npm si nécessaire
+                    npm cache clean --force || true
                     
-                    # Installation TypeScript si nécessaire
-                    if [ ! -d "node_modules/typescript" ]; then
-                        npm install typescript --save-dev --silent
+                    # Installation avec fallback
+                    if [ -f "package-lock.json" ]; then
+                        npm ci --silent --no-audit
+                    else
+                        npm install --silent --no-audit
                     fi
                     
                     echo "✅ Dépendances installées"
-                    echo "📦 TypeScript: \$(npx tsc --version)"
-                """
+                    echo "📦 TypeScript: \$(npx tsc --version 2>/dev/null || echo 'Installation...')"
+                    
+                    # Installation TypeScript si manquant
+                    if ! npx tsc --version &> /dev/null; then
+                        npm install -g typescript
+                    fi
+                '''
             }
         }
         
         stage('✅ Validation') {
             steps {
-                sh """
+                sh '''
                     echo "🔬 VALIDATION CODE"
                     
                     # Validation TypeScript
                     npx tsc --noEmit --skipLibCheck
                     echo "✅ TypeScript validé"
                     
-                    # Tests
-                    npm test -- --watchAll=false --passWithNoTests --silent || echo "⚠️ Tests avec avertissements"
+                    # Tests avec timeout
+                    timeout(time: 2, unit: 'MINUTES') {
+                        npm test -- --watchAll=false --passWithNoTests --silent || echo "⚠️ Tests avec avertissements"
+                    }
                     
                     echo "✅ Validation terminée"
-                """
+                '''
             }
         }
         
         stage('🏗️ Build Production') {
             steps {
-                sh """
+                sh '''
                     echo "🔨 BUILD PRODUCTION"
                     
                     # Nettoyage préalable
@@ -105,68 +119,46 @@ pipeline {
                     npm run build
                     
                     echo "✅ Build réussi"
-                """
+                '''
                 
-                sh """
+                sh '''
                     echo "📊 ANALYSE BUILD"
                     if [ -d "dist" ]; then
                         echo "📁 Dossier dist créé"
-                        echo "📏 Taille: \$(du -sh dist | cut -f1)"
-                        echo "📋 Fichiers: \$(find dist -type f | wc -l)"
-                        ls -la dist/ | head -5
+                        echo "📏 Taille: $(du -sh dist | cut -f1)"
+                        echo "📋 Fichiers: $(find dist -type f | wc -l)"
+                        echo "🔍 Contenu:"
+                        ls -la dist/ | head -10
                     else
                         echo "❌ Aucun build détecté"
+                        echo "📁 Contenu actuel:"
+                        ls -la
                         exit 1
                     fi
-                """
+                '''
             }
         }
         
-        stage('🐳 Construction Docker') {
+        stage('📦 Archivage') {
             steps {
-                sh """
-                    echo "📦 CRÉATION IMAGE DOCKER"
-                    
-                    # Création du Dockerfile
-                    cat > Dockerfile << 'EOF'
-FROM nginx:alpine
-COPY dist/ /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-EOF
-                    
-                    # Construction de l'image
-                    docker build -t plateforme-location:${BUILD_NUMBER} .
-                    echo "✅ Image créée: plateforme-location:${BUILD_NUMBER}"
-                """
+                sh '''
+                    echo "📦 CRÉATION DE L'ARCHIVE"
+                    tar -czf build-${BUILD_NUMBER}.tar.gz dist/
+                    echo "✅ Archive créée: build-${BUILD_NUMBER}.tar.gz"
+                '''
+                
+                archiveArtifacts artifacts: 'build-*.tar.gz', fingerprint: true
             }
         }
         
-        stage('🚀 Déploiement') {
+        stage('🔍 Vérification Finale') {
             steps {
-                sh """
-                    echo "🚀 DÉPLOIEMENT SUR PORT ${APP_PORT}"
-                    
-                    # Arrêt ancien conteneur
-                    docker stop plateforme-app-${APP_PORT} 2>/dev/null || true
-                    docker rm plateforme-app-${APP_PORT} 2>/dev/null || true
-                    
-                    # Déploiement nouveau
-                    docker run -d \\
-                        --name plateforme-app-${APP_PORT} \\
-                        -p ${APP_PORT}:80 \\
-                        plateforme-location:${BUILD_NUMBER}
-                    
-                    echo "✅ Conteneur démarré"
-                    
-                    # Vérification
-                    sleep 3
-                    echo "📊 Statut:"
-                    docker ps --filter name=plateforme-app-${APP_PORT}
-                    
-                    echo "🔍 Test d'accessibilité..."
-                    curl -s -o /dev/null -w "Code HTTP: %{http_code}\n" http://localhost:${APP_PORT} || echo "⏳ Application en démarrage"
-                """
+                sh '''
+                    echo "🔍 VÉRIFICATION FINALE"
+                    echo "📊 Structure finale:"
+                    find dist/ -type f -name "*.html" -o -name "*.js" -o -name "*.css" | head -10
+                    echo "✅ Build prêt pour le déploiement"
+                '''
             }
         }
     }
@@ -178,15 +170,21 @@ EOF
         }
         success {
             echo "🎉 SUCCÈS COMPLET !"
-            echo "🌐 URL: http://localhost:${APP_PORT}"
-            echo "🐳 Image: plateforme-location:${BUILD_NUMBER}"
+            echo "📋 RAPPORT:"
+            echo "• ✅ Environnement configuré"
+            echo "• ✅ Dépendances installées" 
+            echo "• ✅ Validation TypeScript"
+            echo "• ✅ Build production"
+            echo "• ✅ Archive créée"
+            echo ""
+            echo "📦 ARTEFACT: build-${BUILD_NUMBER}.tar.gz"
+            echo "🔧 Prochain: Déploiement manuel ou automatique"
         }
         failure {
             echo "❌ ÉCHEC - Diagnostic:"
-            sh """
-                echo "🔍 Logs récents Docker:"
-                docker logs plateforme-app-${APP_PORT} --tail 10 2>/dev/null || echo "Aucun conteneur"
-            """
+            echo "• Vérifiez les logs d'installation"
+            echo "• Vérifiez la connexion internet pour npm"
+            echo "• Vérifiez package.json et les scripts de build"
         }
     }
 }
