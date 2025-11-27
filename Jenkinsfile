@@ -92,7 +92,7 @@ pipeline {
                     echo "   - Containers: $(docker system info --format '{{.ContainersRunning}}/{{.Containers}} running' 2>/dev/null || echo 'Non disponible')"
                     
                     echo "📊 RESSOURCES:"
-                    docker system df --format "table {{.Type}}\\t{{.Total}}\\t{{.Active}}\\t{{.Size}}" 2>/dev/null || echo "   - Docker non accessible"
+                    docker system df 2>/dev/null || echo "   - Docker non accessible"
                     
                     echo "🔌 PORTS:"
                     netstat -tuln 2>/dev/null | grep ":3101" >/dev/null && echo "   - Port 3101: Occupé" || echo "   - Port 3101: Libre"
@@ -165,20 +165,29 @@ pipeline {
                             echo "   - Utilisation de l'image: node:18-alpine"
                             echo "   - Montage du volume: $(pwd) → /app"
                             
-                            if docker run --rm \\
-                                -v $(pwd):/app \\
-                                -w /app \\
-                                -e NODE_ENV=development \\
-                                node:18-alpine \\
+                            echo "   - Tentative d'installation standard..."
+                            if docker run --rm \
+                                -v $(pwd):/app \
+                                -w /app \
+                                -e NODE_ENV=development \
+                                node:18-alpine \
                                 npm install --silent --no-progress --no-audit --no-fund; then
                                 echo "   - ✅ DÉPENDANCES INSTALLÉES VIA DOCKER"
                             else
                                 echo "   - ⚠️  Échec installation standard, tentative avec --legacy-peer-deps"
-                                docker run --rm \\
-                                    -v $(pwd):/app \\
-                                    -w /app \\
-                                    node:18-alpine \\
-                                    npm install --legacy-peer-deps --silent --no-progress --no-audit --no-fund
+                                if docker run --rm \
+                                    -v $(pwd):/app \
+                                    -w /app \
+                                    node:18-alpine \
+                                    npm install --legacy-peer-deps --silent --no-progress --no-audit --no-fund; then
+                                    echo "   - ✅ DÉPENDANCES INSTALLÉES AVEC --legacy-peer-deps"
+                                else
+                                    echo "   - ❌ ÉCHEC CRITIQUE: Impossible d'installer les dépendances"
+                                    echo "   - 📋 Debug:"
+                                    echo "     - Vérifier package.json"
+                                    echo "     - Vérifier les logs Docker"
+                                    exit 1
+                                fi
                             fi
                             
                             echo "   - 📊 Vérification: $(find node_modules -maxdepth 2 -type d 2>/dev/null | wc -l) dossiers créés"
@@ -215,17 +224,20 @@ pipeline {
                             echo "   - Image: node:18-alpine"
                             echo "   - Commande: npm run build"
                             
-                            if docker run --rm \\
-                                -v $(pwd):/app \\
-                                -w /app \\
-                                -e NODE_ENV=production \\
-                                node:18-alpine \\
+                            if docker run --rm \
+                                -v $(pwd):/app \
+                                -w /app \
+                                -e NODE_ENV=production \
+                                node:18-alpine \
                                 npm run build; then
                                 echo "   - ✅ APPLICATION CONSTRUITE VIA DOCKER"
                                 echo "   - 📁 Contenu du dossier dist:"
                                 ls -la dist/ 2>/dev/null && echo "     - Fichiers: $(find dist/ -type f 2>/dev/null | wc -l)" || echo "     - Dossier dist non trouvé"
                             else
                                 echo "   - ❌ ÉCHEC DU BUILD DOCKER"
+                                echo "   - 📋 Debug:"
+                                echo "     - Vérifier que npm install a réussi"
+                                echo "     - Vérifier les scripts dans package.json"
                                 exit 1
                             fi
                         '''
@@ -249,7 +261,7 @@ FROM nginx:alpine
 RUN apk add --no-cache curl
 
 # Création d'un utilisateur non-root pour la sécurité
-RUN addgroup -g 1001 -S appgroup && \\
+RUN addgroup -g 1001 -S appgroup && \
     adduser -S appuser -u 1001 -G appgroup
 
 # Copie des fichiers de l'application
@@ -289,7 +301,7 @@ RUN chown -R appuser:appgroup /usr/share/nginx/html
 USER appuser
 
 # Health check pour la surveillance
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \\
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost/ || exit 1
 
 # Exposition du port
@@ -341,19 +353,19 @@ EOF
                     
                     echo "🎯 PHASE 2: DÉPLOIEMENT"
                     echo "   - Lancement de la nouvelle version..."
-                    if docker run -d \\
-                        --name plateforme-app-${APP_PORT} \\
-                        -p ${APP_PORT}:80 \\
-                        --restart=unless-stopped \\
-                        --health-cmd="curl -f http://localhost/ || exit 1" \\
-                        --health-interval=30s \\
-                        --health-timeout=10s \\
-                        --health-retries=3 \\
-                        --health-start-period=40s \\
-                        -e NODE_ENV=production \\
-                        -e BUILD_NUMBER=${BUILD_NUMBER} \\
-                        -e DEPLOYMENT_TIMESTAMP=${BUILD_TIMESTAMP} \\
-                        -e BUILD_METHOD=${NODE_AVAILABLE} \\
+                    if docker run -d \
+                        --name plateforme-app-${APP_PORT} \
+                        -p ${APP_PORT}:80 \
+                        --restart=unless-stopped \
+                        --health-cmd="curl -f http://localhost/ || exit 1" \
+                        --health-interval=30s \
+                        --health-timeout=10s \
+                        --health-retries=3 \
+                        --health-start-period=40s \
+                        -e NODE_ENV=production \
+                        -e BUILD_NUMBER=${BUILD_NUMBER} \
+                        -e DEPLOYMENT_TIMESTAMP=${BUILD_TIMESTAMP} \
+                        -e BUILD_METHOD=${NODE_AVAILABLE} \
                         plateforme-location:${BUILD_NUMBER}; then
                         echo "     ✅ NOUVEAU CONTENEUR DÉMARRÉ"
                         echo "     📊 Image: plateforme-location:${BUILD_NUMBER}"
@@ -368,8 +380,8 @@ EOF
                     sleep 10
                     
                     echo "   - Vérification du statut..."
-                    RESTART_POLICY=$(docker inspect plateforme-app-${APP_PORT} --format '{{.HostConfig.RestartPolicy.Name}}' 2>/dev/null || echo "Non disponible")
-                    HEALTH_STATUS=$(docker inspect plateforme-app-${APP_PORT} --format '{{.State.Health.Status}}' 2>/dev/null || echo "Non disponible")
+                    RESTART_POLICY=$(docker inspect plateforme-app-${APP_PORT} --format "{{.HostConfig.RestartPolicy.Name}}" 2>/dev/null || echo "Non disponible")
+                    HEALTH_STATUS=$(docker inspect plateforme-app-${APP_PORT} --format "{{.State.Health.Status}}" 2>/dev/null || echo "Non disponible")
                     echo "     ✅ Restart Policy: $RESTART_POLICY"
                     echo "     ✅ Health Status: $HEALTH_STATUS"
                     
@@ -428,7 +440,7 @@ EOF
                     echo "   - 🛠️  Méthode de build: ${buildMethod}"
                     
                     echo "🔧 ÉTAT DU SYSTÈME:"
-                    CONTAINER_STATUS=\$(docker inspect plateforme-app-${APP_PORT} --format 'Status: {{.State.Status}} | Depuis: {{.State.StartedAt}}' 2>/dev/null || echo "Conteneur non disponible")
+                    CONTAINER_STATUS=\$(docker inspect plateforme-app-${APP_PORT} --format "Status: {{.State.Status}} | Depuis: {{.State.StartedAt}}" 2>/dev/null || echo "Conteneur non disponible")
                     echo "   - 📦 Conteneur: \$CONTAINER_STATUS"
                     
                     echo "🛡️  GARANTIES ACTIVÉES:"
@@ -472,10 +484,10 @@ EOF
                 docker system df 2>/dev/null || echo "ℹ️  Métriques Docker non disponibles"
                 
                 echo "📈 STATISTIQUES:"
-                echo "   - Build: #${BUILD_NUMBER}"
-                echo "   - Durée: ${currentBuild.durationString}"
-                echo "   - Méthode: ${NODE_AVAILABLE}"
-                echo "   - Résultat: ${currentBuild.currentResult}"
+                echo "   - Build: #'${BUILD_NUMBER}'"
+                echo "   - Durée: '${currentBuild.durationString}'"
+                echo "   - Méthode: '${NODE_AVAILABLE}'"
+                echo "   - Résultat: '${currentBuild.currentResult}'"
             '''
         }
         success {
