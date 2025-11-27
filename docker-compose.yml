@@ -1,17 +1,17 @@
-version: '3.9'
+version: "3.9"
 
 services:
   jenkins:
     image: jenkins/jenkins:lts
     container_name: jenkins
-    restart: always   # 🔥 Redémarre à chaque reboot automatiquement
-    user: root        # 🔥 Assure que Docker CLI marche toujours
+    user: root
+    restart: always
     ports:
-      - "8080:8080"
-      - "50000:50000"
+      - "9090:8080"     # accès Jenkins web
+      - "50000:50000"   # agent slave
     volumes:
       - jenkins_home:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock  # 🔥 Jenkins parle au Docker host
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   jenkins_home:
