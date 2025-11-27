@@ -166,29 +166,28 @@ pipeline {
                             echo "   - Montage du volume: $(pwd) → /app"
                             
                             echo "   - Tentative d'installation standard..."
-                            if docker run --rm \
+                            # Test avec affichage des erreurs détaillées
+                            docker run --rm \
                                 -v $(pwd):/app \
                                 -w /app \
                                 -e NODE_ENV=development \
                                 node:18-alpine \
-                                npm install --silent --no-progress --no-audit --no-fund; then
-                                echo "   - ✅ DÉPENDANCES INSTALLÉES VIA DOCKER"
-                            else
-                                echo "   - ⚠️  Échec installation standard, tentative avec --legacy-peer-deps"
-                                if docker run --rm \
-                                    -v $(pwd):/app \
-                                    -w /app \
-                                    node:18-alpine \
-                                    npm install --legacy-peer-deps --silent --no-progress --no-audit --no-fund; then
-                                    echo "   - ✅ DÉPENDANCES INSTALLÉES AVEC --legacy-peer-deps"
-                                else
+                                sh -c "
+                                    echo '=== DÉBUT INSTALLATION NPM ===' && \
+                                    npm install --silent --no-progress --no-audit --no-fund || \
+                                    (echo '=== ÉCHEC, TENTATIVE AVEC LEGACY PEER DEPS ===' && \
+                                    npm install --legacy-peer-deps --silent --no-progress --no-audit --no-fund || \
+                                    (echo '=== ÉCHEC CRITIQUE ===' && \
+                                    echo 'Dernière tentative avec verbose...' && \
+                                    npm install --legacy-peer-deps --no-audit --no-fund))
+                                " && echo "   - ✅ DÉPENDANCES INSTALLÉES" || {
                                     echo "   - ❌ ÉCHEC CRITIQUE: Impossible d'installer les dépendances"
                                     echo "   - 📋 Debug:"
+                                    echo "     - Vérifier la connexion internet"
                                     echo "     - Vérifier package.json"
-                                    echo "     - Vérifier les logs Docker"
+                                    echo "     - Tester manuellement: docker run -it --rm -v \$(pwd):/app -w /app node:18-alpine sh"
                                     exit 1
-                                fi
-                            fi
+                                }
                             
                             echo "   - 📊 Vérification: $(find node_modules -maxdepth 2 -type d 2>/dev/null | wc -l) dossiers créés"
                         '''
@@ -476,7 +475,9 @@ EOF
     post {
         always {
             echo "🏁 CYCLE DE DÉPLOIEMENT TERMINÉ"
-            sh '''
+            script {
+                def buildMethod = env.NODE_AVAILABLE == 'true' ? 'Node.js Local' : 'Docker'
+                sh """
                 echo "🧹 NETTOYAGE INTELLIGENT..."
                 rm -f Dockerfile 2>/dev/null && echo "✅ Fichiers temporaires nettoyés" || echo "ℹ️  Aucun fichier à nettoyer"
                 
@@ -484,11 +485,12 @@ EOF
                 docker system df 2>/dev/null || echo "ℹ️  Métriques Docker non disponibles"
                 
                 echo "📈 STATISTIQUES:"
-                echo "   - Build: #'${BUILD_NUMBER}'"
-                echo "   - Durée: '${currentBuild.durationString}'"
-                echo "   - Méthode: '${NODE_AVAILABLE}'"
-                echo "   - Résultat: '${currentBuild.currentResult}'"
-            '''
+                echo "   - Build: #${BUILD_NUMBER}"
+                echo "   - Durée: ${currentBuild.durationString}"
+                echo "   - Méthode: ${buildMethod}"
+                echo "   - Résultat: ${currentBuild.currentResult}"
+                """
+            }
         }
         success {
             echo "🎉 DÉPLOIEMENT RÉUSSI! 🚀"
