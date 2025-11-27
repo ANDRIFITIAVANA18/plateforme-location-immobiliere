@@ -268,7 +268,7 @@ pipeline {
                 echo "🔍 Vérification du port ${APP_PORT}..."
                 if docker ps --format 'table {{.Ports}}' | grep -q ":${APP_PORT}->"; then
                     echo "⚠️ Port ${APP_PORT} déjà utilisé, libération..."
-                    docker stop \$(docker ps -q --filter publish=${APP_PORT}) 2>/dev/null || true
+                    docker stop \\$(docker ps -q --filter publish=${APP_PORT}) 2>/dev/null || true
                 fi
                 
                 # 4. Déploiement avec timeout
