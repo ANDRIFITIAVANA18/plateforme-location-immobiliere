@@ -408,7 +408,11 @@ EOF
         
         stage('📊 Validation et Métriques Finales') {
             steps {
-                sh """
+                script {
+                    def buildMethod = env.NODE_AVAILABLE == 'true' ? 'Node.js Local' : 'Docker'
+                    def buildMethodEmoji = env.NODE_AVAILABLE == 'true' ? 'Node.js Local 🚀' : 'Docker 🐳'
+                    
+                    sh """
                     echo "📊 RAPPORT FINAL DE DÉPLOIEMENT"
                     echo "========================================"
                     
@@ -421,11 +425,11 @@ EOF
                     echo "   - ⏱️  Temps de build: ${currentBuild.durationString}"
                     echo "   - 🔢 Build number: #${BUILD_NUMBER}"
                     echo "   - 🕐 Timestamp: ${BUILD_TIMESTAMP}"
-                    echo "   - 🛠️  Méthode de build: ${env.NODE_AVAILABLE == 'true' ? 'Node.js Local' : 'Docker'}"
+                    echo "   - 🛠️  Méthode de build: ${buildMethod}"
                     
                     echo "🔧 ÉTAT DU SYSTÈME:"
-                    CONTAINER_STATUS=$(docker inspect plateforme-app-${APP_PORT} --format 'Status: {{.State.Status}} | Depuis: {{.State.StartedAt}}' 2>/dev/null || echo "Conteneur non disponible")
-                    echo "   - 📦 Conteneur: $CONTAINER_STATUS"
+                    CONTAINER_STATUS=\$(docker inspect plateforme-app-${APP_PORT} --format 'Status: {{.State.Status}} | Depuis: {{.State.StartedAt}}' 2>/dev/null || echo "Conteneur non disponible")
+                    echo "   - 📦 Conteneur: \$CONTAINER_STATUS"
                     
                     echo "🛡️  GARANTIES ACTIVÉES:"
                     echo "   - ✅ Redémarrage automatique"
@@ -433,7 +437,7 @@ EOF
                     echo "   - ✅ Surveillance 24/7"
                     echo "   - ✅ Sécurité (non-root)"
                     echo "   - ✅ Logs centralisés"
-                    echo "   - ✅ Build: ${env.NODE_AVAILABLE == 'true' ? 'Node.js Local 🚀' : 'Docker 🐳'}"
+                    echo "   - ✅ Build: ${buildMethodEmoji}"
                     
                     echo "📋 MAINTENANCE:"
                     echo "   - 🔄 Vérification Git: Toutes les heures"
@@ -441,17 +445,18 @@ EOF
                     echo "   - 🧹 Historique: 20 builds conservés"
                     
                     echo "🎯 STATUT: DÉPLOIEMENT RÉUSSI ✅"
-                """
-                
-                // Test final de validation
-                sh """
+                    """
+                    
+                    // Test final de validation
+                    sh """
                     echo "🔍 TEST FINAL DE VALIDATION..."
                     if curl -f -s http://localhost:${APP_PORT} > /dev/null; then
                         echo "🎉 ✅ APPLICATION EN PRODUCTION ET OPÉRATIONNELLE"
                     else
                         echo "⚠️  APPLICATION DÉPLOYÉE MAIS VÉRIFICATION MANUELLE RECOMMANDÉE"
                     fi
-                """
+                    """
+                }
             }
         }
     }
@@ -479,26 +484,26 @@ EOF
                 def buildMethod = env.NODE_AVAILABLE == 'true' ? 'Node.js Local 🚀' : 'Docker 🐳'
                 
                 sh """
-                    echo " "
-                    echo "✅ ✅ ✅ MISSION ACCOMPLIE!"
-                    echo "========================================"
-                    echo "🌟 DÉPLOIEMENT RÉALISÉ AVEC SUCCÈS"
-                    echo "   - Méthode: ${buildMethod}"
-                    echo "   - Build: #${BUILD_NUMBER}"
-                    echo "   - Timestamp: ${BUILD_TIMESTAMP}"
-                    echo " "
-                    echo "🌐 VOTRE APPLICATION EST MAINTENANT:"
-                    echo "   - 🔄 Auto-redémarrante"
-                    echo "   - 🏥 Auto-guérissante"
-                    echo "   - 📈 Auto-surveillée"
-                    echo "   - 🔧 Auto-maintenue"
-                    echo " "
-                    echo "🎯 ACCÈS IMMÉDIAT:"
-                    echo "   - 📱 Application: http://localhost:${APP_PORT}"
-                    echo "   - ⚙️  Administration: http://localhost:${JENKINS_PORT}"
-                    echo " "
-                    echo "🕐 DÉPLOIEMENT TERMINÉ: $(date)"
-                    echo " "
+                echo " "
+                echo "✅ ✅ ✅ MISSION ACCOMPLIE!"
+                echo "========================================"
+                echo "🌟 DÉPLOIEMENT RÉALISÉ AVEC SUCCÈS"
+                echo "   - Méthode: ${buildMethod}"
+                echo "   - Build: #${BUILD_NUMBER}"
+                echo "   - Timestamp: ${BUILD_TIMESTAMP}"
+                echo " "
+                echo "🌐 VOTRE APPLICATION EST MAINTENANT:"
+                echo "   - 🔄 Auto-redémarrante"
+                echo "   - 🏥 Auto-guérissante"
+                echo "   - 📈 Auto-surveillée"
+                echo "   - 🔧 Auto-maintenue"
+                echo " "
+                echo "🎯 ACCÈS IMMÉDIAT:"
+                echo "   - 📱 Application: http://localhost:${APP_PORT}"
+                echo "   - ⚙️  Administration: http://localhost:${JENKINS_PORT}"
+                echo " "
+                echo "🕐 DÉPLOIEMENT TERMINÉ: \$(date)"
+                echo " "
                 """
             }
         }
