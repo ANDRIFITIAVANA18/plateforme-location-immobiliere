@@ -20,7 +20,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      -  DATABASE_URL=postgresql://postgres@db:5432/locaplace
+      - DATABASE_URL=postgresql://postgres@db:5432/locaplace
     depends_on:
       db:
         condition: service_healthy
@@ -37,7 +37,7 @@ services:
     depends_on:
       - backend
 
-jenkins:
+  jenkins:
     image: jenkins/jenkins:lts
     privileged: true
     user: root
@@ -49,3 +49,4 @@ jenkins:
 
 volumes:
   postgres_data:
+  jenkins_home:
