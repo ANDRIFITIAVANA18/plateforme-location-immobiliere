@@ -29,10 +29,10 @@ pipeline {
                     
                     // Détection automatique du type de déclenchement
                     def buildCause = currentBuild.getBuildCauses()[0]
-                    if (buildCause instanceof hudson.triggers.SCMTrigger$SCMTriggerCause) {
+                    if (buildCause instanceof hudson.triggers.SCMTrigger\$SCMTriggerCause) {
                         echo "🔄 DÉCLENCHÉ AUTOMATIQUEMENT - Changements Git détectés"
                         currentBuild.description = "Auto: Changements détectés dans le code"
-                    } else if (buildCause instanceof hudson.model.Cause$UserIdCause) {
+                    } else if (buildCause instanceof hudson.model.Cause\$UserIdCause) {
                         echo "👤 DÉCLENCHÉ MANUELLEMENT - Action utilisateur"
                         currentBuild.description = "Manuel: Déclenché par ${buildCause.userName}"
                     } else {
@@ -45,16 +45,16 @@ pipeline {
                     echo 📊 ANALYSE DU DÉPÔT GIT
                     echo ========================================
                     echo 🔀 Branche: %GIT_BRANCH%
-                    echo 📝 Commit: $(git log -1 --pretty=format:'%%h - %%s')
-                    echo 👤 Auteur: $(git log -1 --pretty=format:'%%an')
-                    echo 📅 Date: $(git log -1 --pretty=format:'%%ci')
+                    echo 📝 Commit: \$(git log -1 --pretty=format:'%%h - %%s')
+                    echo 👤 Auteur: \$(git log -1 --pretty=format:'%%an')
+                    echo 📅 Date: \$(git log -1 --pretty=format:'%%ci')
                     
                     echo 📁 Fichiers modifiés récemment:
                     git diff --name-only HEAD~1 HEAD 2>nul | head -10 || echo "Nouveau commit ou première build"
                     
                     echo 📦 Métriques du projet:
-                    echo "   - Dossier src: $(ls -la src | find /c /v "" 2>nul || echo 0) fichiers"
-                    echo "   - Package.json: $(type package.json | find /c /v "" 2>nul || echo 0) lignes"
+                    echo "   - Dossier src: \$(ls -la src | find /c /v "" 2>nul || echo 0) fichiers"
+                    echo "   - Package.json: \$(type package.json | find /c /v "" 2>nul || echo 0) lignes"
                 """
             }
         }
@@ -103,8 +103,8 @@ pipeline {
                     echo RUN npm run build
                     echo.
                     echo FROM nginx:alpine
-                    echo RUN apk add --no-cache curl && \\
-                    echo     addgroup -g 1001 -S appgroup && \\
+                    echo RUN apk add --no-cache curl && ^
+                    echo     addgroup -g 1001 -S appgroup && ^
                     echo     adduser -S appuser -u 1001 -G appgroup
                     echo COPY --from=builder --chown=appuser:appgroup /app/dist /usr/share/nginx/html
                     echo USER appuser
@@ -175,11 +175,11 @@ pipeline {
                     set /a COUNTER+=1
                     curl -f http://localhost:%APP_PORT% >nul 2>&1
                     if %errorlevel% equ 0 (
-                        echo "     ✅ ✅ ✅ APPLICATION ACCESSIBLE (Tentative %COUNTER%/%MAX_RETRIES%)"
+                        echo "     ✅ ✅ ✅ APPLICATION ACCESSIBLE (Tentative %%COUNTER%%/%%MAX_RETRIES%%)"
                         goto health_success
                     ) else (
-                        echo "     ⏳ Application en démarrage... (Tentative %COUNTER%/%MAX_RETRIES%)"
-                        if %COUNTER% lss %MAX_RETRIES% (
+                        echo "     ⏳ Application en démarrage... (Tentative %%COUNTER%%/%%MAX_RETRIES%%)"
+                        if %%COUNTER%% lss %%MAX_RETRIES%% (
                             timeout /t 5 /nobreak >nul
                             goto health_check
                         ) else (
@@ -206,8 +206,8 @@ pipeline {
                     
                     echo 📈 MÉTRIQUES DE PERFORMANCE:
                     echo "   - Temps de build: ${currentBuild.durationString}"
-                    echo "   - Taille image: $(docker images plateforme-location:%BUILD_NUMBER% --format "{{.Size}}")"
-                    echo "   - Mémoire utilisée: $(docker stats plateforme-app-%APP_PORT% --no-stream --format "{{.MemUsage}}")"
+                    echo "   - Taille image: \$(docker images plateforme-location:%BUILD_NUMBER% --format "{{.Size}}")"
+                    echo "   - Mémoire utilisée: \$(docker stats plateforme-app-%APP_PORT% --no-stream --format "{{.MemUsage}}")"
                     
                     echo 🔧 CONFIGURATION APPLIQUÉE:
                     docker inspect plateforme-app-%APP_PORT% --format "table {{.Name}}\\t{{.State.Status}}\\t{{.State.StartedAt}}"
