@@ -1,16 +1,15 @@
 pipeline {
     agent any
-    
+
     triggers {
         githubPush()
         pollSCM('H/1 * * * *')
     }
-    
+
     environment {
         NODE_ENV = 'production'
         CI = 'true'
         APP_PORT = '3100'
-        // Configuration Docker robuste
         DOCKER_HOST = "tcp://localhost:2375"
         DOCKER_TLS_VERIFY = "0"
     }
@@ -19,20 +18,20 @@ pipeline {
 
         stage('🔍 Checkout Git') {
             steps {
-                echo "📥 Checkout du dépôt Git"
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/ANDRIFITIAVANA18/plateforme-location-immobiliere.git'
-                    ]]
-                ])
+                echo "📥 Clonage ou mise à jour du dépôt Git"
+                sh '''
+                    if [ ! -d ".git" ]; then
+                        git clone https://github.com/ANDRIFITIAVANA18/plateforme-location-immobiliere.git .
+                    else
+                        git fetch origin
+                        git reset --hard origin/main
+                    fi
+                '''
             }
         }
 
-        stage('🔧 Configuration Docker') {
+        stage('🔧 Vérification Docker') {
             steps {
-                echo "🔧 Vérification Docker dans Jenkins"
                 sh '''
                     echo "🛠️ Vérification Docker..."
                     if docker version >/dev/null 2>&1; then
@@ -46,22 +45,10 @@ pipeline {
             }
         }
 
-        stage('📦 Analyse Git') {
+        stage('📥 Installation Dépendances Node.js') {
             steps {
                 sh '''
-                    echo "📊 Informations Git"
-                    git log -1 --pretty=format:'%h - %s' || echo "Nouveau commit"
-                    git log -1 --pretty=format:'%an' || echo "Auteur inconnu"
-                    git branch --show-current || echo "Branche inconnue"
-                    git diff --name-only HEAD~1 HEAD 2>/dev/null | head -10 || echo "Nouveau commit"
-                '''
-            }
-        }
-
-        stage('📥 Installation Dépendances') {
-            steps {
-                sh '''
-                    echo "🔧 Installation dépendances Node.js"
+                    echo "🔧 Installation des dépendances Node.js"
                     docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
                         npm install -g typescript
                         npm install --silent --no-progress
@@ -108,12 +95,11 @@ pipeline {
                 sh '''
                     echo "🐳 Création Docker image"
                     cat > Dockerfile << EOF
-                    FROM nginx:alpine
-                    COPY dist/ /usr/share/nginx/html
-                    EXPOSE 80
-                    CMD ["nginx", "-g", "daemon off;"]
-                    EOF
-
+FROM nginx:alpine
+COPY dist/ /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+EOF
                     docker build -t plateforme-location:${BUILD_NUMBER} .
                 '''
             }
@@ -123,22 +109,25 @@ pipeline {
             steps {
                 sh '''
                     echo "🚀 Déploiement sur port ${APP_PORT}"
+
+                    # Arrêt et suppression des conteneurs existants
                     docker stop plateforme-app-${APP_PORT} 2>/dev/null || true
                     docker rm plateforme-app-${APP_PORT} 2>/dev/null || true
 
+                    # Libération du port si occupé
                     if docker ps --format "table {{.Ports}}" | grep -q ":${APP_PORT}->"; then
                         docker stop $(docker ps -q --filter publish=${APP_PORT}) || true
                     fi
 
+                    # Lancement du conteneur
                     docker run -d \
                         --name plateforme-app-${APP_PORT} \
                         -p ${APP_PORT}:80 \
                         plateforme-location:${BUILD_NUMBER}
 
-                    echo "⏳ Attente démarrage conteneur..."
+                    # Vérification du démarrage
+                    echo "⏳ Attente du démarrage..."
                     sleep 10
-
-                    echo "📊 Vérification statut"
                     docker ps -a --filter "name=plateforme-app-${APP_PORT}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
                 '''
             }
