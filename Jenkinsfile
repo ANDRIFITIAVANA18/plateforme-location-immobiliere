@@ -9,7 +9,7 @@ pipeline {
     environment {
         NODE_ENV = 'production'
         CI = 'true'
-        APP_PORT = '3100'
+        APP_PORT = '3101'  // ✅ CHANGEMENT DE PORT
         JENKINS_PORT = '9090'
     }
     
@@ -45,7 +45,14 @@ pipeline {
                     echo "🐳 VÉRIFICATION DOCKER"
                     docker --version && echo "✅ Docker disponible"
                     docker ps && echo "✅ Permissions Docker OK"
-                    echo "🔍 Port ${APP_PORT}: \$(docker ps --format 'table {{.Ports}}' | grep ${APP_PORT} || echo 'Libre')"
+                    
+                    echo "🔍 Vérification des ports:"
+                    echo "Port 3100: \$(docker ps --format 'table {{.Ports}}' | grep 3100 || echo 'Libre')"
+                    echo "Port ${APP_PORT}: \$(docker ps --format 'table {{.Ports}}' | grep ${APP_PORT} || echo 'Libre')"
+                    
+                    echo "🧹 Nettoyage des anciens conteneurs..."
+                    docker stop myapp-3100 2>/dev/null || echo "ℹ️ Aucun conteneur myapp-3100 à arrêter"
+                    docker rm myapp-3100 2>/dev/null || echo "ℹ️ Aucun conteneur myapp-3100 à supprimer"
                 """
             }
         }
@@ -55,7 +62,7 @@ pipeline {
                 sh """
                     echo "🔨 CONSTRUCTION COMPLÈTE AVEC DOCKER"
                     
-                    # Création du Dockerfile de build (SOLUTION GARANTIE)
+                    # Création du Dockerfile de build
                     cat > Dockerfile.build << 'EOF'
 FROM node:18-alpine AS builder
 WORKDIR /app
@@ -83,7 +90,7 @@ EOF
                 sh """
                     echo "🚀 DÉPLOIEMENT SUR PORT ${APP_PORT}"
                     
-                    # Arrêt de l'ancien conteneur
+                    # Arrêt de l'ancien conteneur (même nom)
                     docker stop plateforme-app-${APP_PORT} 2>/dev/null || echo "ℹ️ Aucun conteneur à arrêter"
                     docker rm plateforme-app-${APP_PORT} 2>/dev/null || echo "ℹ️ Aucun conteneur à supprimer"
                     
@@ -138,8 +145,9 @@ EOF
             echo "❌ ÉCHEC - Diagnostic:"
             sh '''
                 echo "🔧 Informations:"
-                docker images | head -5
-                docker ps -a | head -5
+                docker ps -a
+                echo "🔍 Ports utilisés:"
+                netstat -tuln | grep ":31" || echo "Aucun port 31xx utilisé"
             '''
         }
     }
