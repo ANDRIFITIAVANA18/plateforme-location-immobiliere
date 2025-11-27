@@ -268,14 +268,14 @@ pipeline {
                 echo "🔍 Vérification du port ${APP_PORT}..."
                 if docker ps --format 'table {{.Ports}}' | grep -q ":${APP_PORT}->"; then
                     echo "⚠️ Port ${APP_PORT} déjà utilisé, libération..."
-                    docker stop $(docker ps -q --filter publish=${APP_PORT}) 2>/dev/null || true
+                    docker stop \$(docker ps -q --filter publish=${APP_PORT}) 2>/dev/null || true
                 fi
                 
                 # 4. Déploiement avec timeout
                 echo "🚀 Lancement du conteneur..."
-                docker run -d \
-                    --name plateforme-app-${APP_PORT} \
-                    -p ${APP_PORT}:80 \
+                docker run -d \\
+                    --name plateforme-app-${APP_PORT} \\
+                    -p ${APP_PORT}:80 \\
                     plateforme-location:${BUILD_NUMBER}
                 
                 # 5. Vérification du démarrage
@@ -294,19 +294,19 @@ pipeline {
                 echo "🔍 TEST DE SANTÉ..."
                 MAX_RETRIES=5
                 COUNTER=0
-                while [ \$COUNTER -lt \$MAX_RETRIES ]; do
+                while [ \\$COUNTER -lt \\$MAX_RETRIES ]; do
                     if curl -f http://localhost:${APP_PORT} > /dev/null 2>&1; then
                         echo "✅ ✅ ✅ APPLICATION ACCESSIBLE!"
                         echo "🌐 URL: http://localhost:${APP_PORT}"
                         break
                     else
-                        echo "⏳ Tentative \$((COUNTER+1))/\$MAX_RETRIES..."
+                        echo "⏳ Tentative \\$((COUNTER+1))/\\$MAX_RETRIES..."
                         sleep 5
-                        COUNTER=\$((COUNTER+1))
+                        COUNTER=\\$((COUNTER+1))
                     fi
                 done
                 
-                if [ \$COUNTER -eq \$MAX_RETRIES ]; then
+                if [ \\$COUNTER -eq \\$MAX_RETRIES ]; then
                     echo "⚠️ Application lente à démarrer, mais conteneur actif"
                     echo "🌐 URL: http://localhost:${APP_PORT}"
                     echo "💡 Vérifiez manuellement dans quelques secondes"
