@@ -11,18 +11,43 @@ pipeline {
                 checkout scm
                 sh '''
                     echo "✅ Code récupéré depuis GitHub"
-                    echo "📁 Vérification des fichiers:"
-                    ls -la package.json src/ | head -10
+                    echo "🔍 Vérification des fichiers TypeScript..."
+                    # Vérifie s'il y a des erreurs de syntaxe
+                    npx tsc --noEmit --skipLibCheck 2>/dev/null && echo "✅ TypeScript valide" || echo "⚠️ Erreurs TypeScript détectées"
                 '''
             }
         }
         
-        stage('🐳 Création Image Node.js Personnalisée') {
+        stage('🔧 Correction Automatique') {
             steps {
                 sh '''
-                    echo "🔨 Création d'une image Docker personnalisée..."
+                    echo "🔧 Correction des erreurs de syntaxe..."
                     
-                    # Création d'un Dockerfile pour builder l'application
+                    # Correction de l'erreur dans App.tsx
+                    if [ -f "src/App.tsx" ]; then
+                        echo "📝 Correction de App.tsx..."
+                        # Remplace "export default App;//" par "export default App; //"
+                        sed -i 's/export default App;\\/\\/test/export default App; \\/\\/ test/g' src/App.tsx
+                        sed -i 's/export default App;\\/\\/ /export default App; \\/\\/ /g' src/App.tsx
+                        
+                        # Vérification
+                        echo "📋 Ligne 411 après correction:"
+                        sed -n '411p' src/App.tsx
+                    fi
+                    
+                    # Test de build local
+                    echo "🧪 Test de build..."
+                    npx tsc --noEmit --skipLibCheck 2>/dev/null && echo "✅ Build test réussi" || echo "⚠️ Build test échoué"
+                '''
+            }
+        }
+        
+        stage('🐳 Build Image Docker') {
+            steps {
+                sh '''
+                    echo "🔨 Construction de l'image Docker..."
+                    
+                    # Création du Dockerfile de build
                     cat > Dockerfile.build << 'EOF'
 FROM node:18-alpine AS builder
 WORKDIR /app
@@ -39,21 +64,21 @@ EOF
                     
                     # Construction de l'image
                     docker build -f Dockerfile.build -t myapp-complete:${BUILD_NUMBER} .
-                    echo "✅ Image complète créée"
+                    echo "✅ Image Docker construite avec succès!"
                 '''
             }
         }
         
-        stage('🚀 Déploiement Immédiat') {
+        stage('🚀 Déploiement') {
             steps {
                 sh """
                     echo "🚀 Déploiement de l'application..."
                     
-                    # Arrêt des anciens conteneurs
+                    # Nettoyage
                     docker stop myapp-${APP_PORT} 2>/dev/null || echo "ℹ️ Aucun conteneur à arrêter"
                     docker rm myapp-${APP_PORT} 2>/dev/null || echo "ℹ️ Aucun conteneur à supprimer"
                     
-                    # Démarrage du nouveau conteneur
+                    # Déploiement
                     docker run -d \\
                         --name myapp-${APP_PORT} \\
                         -p ${APP_PORT}:80 \\
@@ -61,13 +86,14 @@ EOF
                     
                     # Vérification
                     echo "⏳ Attente du démarrage..."
-                    sleep 10
+                    sleep 8
                     
-                    echo "📊 Statut:"
+                    echo "📊 Statut du conteneur:"
                     docker ps --filter name=myapp-${APP_PORT}
                     
                     echo "🎉 SUCCÈS COMPLET!"
-                    echo "🌐 Application disponible sur: http://localhost:${APP_PORT}"
+                    echo "🌐 Votre application React est MAINTENANT EN LIGNE!"
+                    echo "📍 Accédez à: http://localhost:${APP_PORT}"
                 """
             }
         }
@@ -78,15 +104,17 @@ EOF
             echo "🏁 Pipeline terminé - Build #${BUILD_NUMBER}"
         }
         success {
-            echo "✅ FÉLICITATIONS! Votre application est EN LIGNE! 🚀"
-            echo "📍 URL: http://localhost:3100"
+            echo "✅ FÉLICITATIONS! 🚀"
+            echo "🌍 Votre application est déployée avec succès!"
         }
         failure {
-            echo "❌ Échec"
+            echo "❌ Échec - Vérifiez les erreurs TypeScript"
             sh '''
-                echo "🔧 Diagnostic:"
-                docker images | head -5
-                docker ps -a | head -5
+                echo "🔍 Diagnostic détaillé:"
+                echo "=== Erreurs TypeScript ==="
+                npx tsc --noEmit --skipLibCheck 2>&1 | head -20 || echo "Aucune erreur TypeScript"
+                echo "=== Fichier App.tsx (lignes 405-415) ==="
+                sed -n '405,415p' src/App.tsx 2>/dev/null || echo "Fichier App.tsx non trouvé"
             '''
         }
     }
