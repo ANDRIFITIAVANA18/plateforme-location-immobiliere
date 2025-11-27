@@ -1,42 +1,36 @@
 pipeline {
     agent any
-    triggers { pollSCM('H/5 * * * *') }
     environment { 
         APP_PORT = '3100'
-        JENKINS_PORT = '9090'  // ✅ Ton port Jenkins
+        JENKINS_PORT = '9090'
     }
     
     stages {
-        stage('🔍 Détection Git') {
-            when { changeset "**/*" }
+        stage('🚀 Tout-en-un') {
             steps {
-                echo "📦 Build #${BUILD_NUMBER} - Jenkins: ${JENKINS_PORT}"
-                sh 'git log -1 --pretty=format:"📝 %h - %s"'
-            }
-        }
-        
-        stage('🐳 Build et Déploiement') {
-            steps {
-                sh '''
-                    # Build
-                    docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
-                        npm install
-                        npm run build
-                    "
+                sh """
+                    echo "🎯 Build #${BUILD_NUMBER} - Jenkins: ${JENKINS_PORT}"
                     
-                    # Création image
-                    echo "FROM nginx:alpine" > Dockerfile
-                    echo "COPY dist/ /usr/share/nginx/html" >> Dockerfile
-                    docker build -t myapp:${BUILD_NUMBER} .
+                    # Construction et déploiement en une commande
+                    docker build -t myapp:${BUILD_NUMBER} - << 'EOF'
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN npm install && npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+EOF
                     
                     # Déploiement
                     docker stop myapp-${APP_PORT} 2>/dev/null || true
                     docker rm myapp-${APP_PORT} 2>/dev/null || true
                     docker run -d -p ${APP_PORT}:80 --name myapp-${APP_PORT} myapp:${BUILD_NUMBER}
                     
-                    echo "✅ Déployé: http://localhost:${APP_PORT}"
-                    echo "⚙️ Jenkins: http://localhost:${JENKINS_PORT}"
-                '''
+                    echo "✅ Terminé! http://localhost:${APP_PORT}"
+                """
             }
         }
     }
