@@ -252,8 +252,8 @@ pipeline {
                 
                 # 1. Arrêt forcé de l'ancien conteneur
                 echo "🛑 Arrêt de l'ancien conteneur..."
-                docker stop plateforme-app-${APP_PORT} 2>/dev/null || echo "ℹ️ Aucun conteneur à arrêter"
-                docker rm plateforme-app-${APP_PORT} 2>/dev/null || echo "ℹ️ Aucun conteneur à supprimer"
+                docker stop plateforme-app-${APP_PORT} 2>/dev/null || echo "Aucun conteneur à arrêter"
+                docker rm plateforme-app-${APP_PORT} 2>/dev/null || echo "Aucun conteneur à supprimer"
                 
                 # 2. Vérification que l'image existe
                 echo "🔍 Vérification de l'image..."
@@ -265,10 +265,10 @@ pipeline {
                 fi
                 
                 # 3. Vérification du port
-                echo "🔍 Vérification du port ${APP_PORT}..."
+                echo "🔍 Vérification du port..."
                 if docker ps --format 'table {{.Ports}}' | grep -q ":${APP_PORT}->"; then
-                    echo "⚠️ Port ${APP_PORT} déjà utilisé, libération..."
-                    docker stop \\$(docker ps -q --filter publish=${APP_PORT}) 2>/dev/null || true
+                    echo "⚠️ Port déjà utilisé, libération..."
+                    docker stop $(docker ps -q --filter publish=${APP_PORT}) 2>/dev/null || true
                 fi
                 
                 # 4. Déploiement avec timeout
@@ -288,28 +288,28 @@ pipeline {
                 
                 # 7. Vérification des logs
                 echo "📋 LOGS (dernières lignes):"
-                docker logs plateforme-app-${APP_PORT} --tail 20 2>/dev/null || echo "⚠️ Impossible de récupérer les logs"
+                docker logs plateforme-app-${APP_PORT} --tail 20 2>/dev/null || echo "Impossible de récupérer les logs"
                 
                 # 8. Test de santé avec retry
                 echo "🔍 TEST DE SANTÉ..."
                 MAX_RETRIES=5
                 COUNTER=0
-                while [ \\$COUNTER -lt \\$MAX_RETRIES ]; do
+                while [ \$COUNTER -lt \$MAX_RETRIES ]; do
                     if curl -f http://localhost:${APP_PORT} > /dev/null 2>&1; then
-                        echo "✅ ✅ ✅ APPLICATION ACCESSIBLE!"
-                        echo "🌐 URL: http://localhost:${APP_PORT}"
+                        echo "✅ APPLICATION ACCESSIBLE!"
+                        echo "URL: http://localhost:${APP_PORT}"
                         break
                     else
-                        echo "⏳ Tentative \\$((COUNTER+1))/\\$MAX_RETRIES..."
+                        echo "Tentative \$((COUNTER+1))/\$MAX_RETRIES..."
                         sleep 5
-                        COUNTER=\\$((COUNTER+1))
+                        COUNTER=\$((COUNTER+1))
                     fi
                 done
                 
-                if [ \\$COUNTER -eq \\$MAX_RETRIES ]; then
-                    echo "⚠️ Application lente à démarrer, mais conteneur actif"
-                    echo "🌐 URL: http://localhost:${APP_PORT}"
-                    echo "💡 Vérifiez manuellement dans quelques secondes"
+                if [ \$COUNTER -eq \$MAX_RETRIES ]; then
+                    echo "Application lente à démarrer, mais conteneur actif"
+                    echo "URL: http://localhost:${APP_PORT}"
+                    echo "Vérifiez manuellement dans quelques secondes"
                 fi
             """
         }
