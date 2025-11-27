@@ -165,19 +165,19 @@ pipeline {
                             echo "   - Utilisation de l'image: node:18-alpine"
                             echo "   - Montage du volume: $(pwd) → /app"
                             
-                            if docker run --rm \
-                                -v $(pwd):/app \
-                                -w /app \
-                                -e NODE_ENV=development \
-                                node:18-alpine \
+                            if docker run --rm \\
+                                -v $(pwd):/app \\
+                                -w /app \\
+                                -e NODE_ENV=development \\
+                                node:18-alpine \\
                                 npm install --silent --no-progress --no-audit --no-fund; then
                                 echo "   - ✅ DÉPENDANCES INSTALLÉES VIA DOCKER"
                             else
                                 echo "   - ⚠️  Échec installation standard, tentative avec --legacy-peer-deps"
-                                docker run --rm \
-                                    -v $(pwd):/app \
-                                    -w /app \
-                                    node:18-alpine \
+                                docker run --rm \\
+                                    -v $(pwd):/app \\
+                                    -w /app \\
+                                    node:18-alpine \\
                                     npm install --legacy-peer-deps --silent --no-progress --no-audit --no-fund
                             fi
                             
@@ -215,11 +215,11 @@ pipeline {
                             echo "   - Image: node:18-alpine"
                             echo "   - Commande: npm run build"
                             
-                            if docker run --rm \
-                                -v $(pwd):/app \
-                                -w /app \
-                                -e NODE_ENV=production \
-                                node:18-alpine \
+                            if docker run --rm \\
+                                -v $(pwd):/app \\
+                                -w /app \\
+                                -e NODE_ENV=production \\
+                                node:18-alpine \\
                                 npm run build; then
                                 echo "   - ✅ APPLICATION CONSTRUITE VIA DOCKER"
                                 echo "   - 📁 Contenu du dossier dist:"
@@ -249,7 +249,7 @@ FROM nginx:alpine
 RUN apk add --no-cache curl
 
 # Création d'un utilisateur non-root pour la sécurité
-RUN addgroup -g 1001 -S appgroup && \
+RUN addgroup -g 1001 -S appgroup && \\
     adduser -S appuser -u 1001 -G appgroup
 
 # Copie des fichiers de l'application
@@ -269,7 +269,7 @@ server {
     }
 
     # Cache long pour les assets statiques
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -289,7 +289,7 @@ RUN chown -R appuser:appgroup /usr/share/nginx/html
 USER appuser
 
 # Health check pour la surveillance
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \\
     CMD curl -f http://localhost/ || exit 1
 
 # Exposition du port
@@ -341,19 +341,19 @@ EOF
                     
                     echo "🎯 PHASE 2: DÉPLOIEMENT"
                     echo "   - Lancement de la nouvelle version..."
-                    if docker run -d \
-                        --name plateforme-app-${APP_PORT} \
-                        -p ${APP_PORT}:80 \
-                        --restart=unless-stopped \
-                        --health-cmd="curl -f http://localhost/ || exit 1" \
-                        --health-interval=30s \
-                        --health-timeout=10s \
-                        --health-retries=3 \
-                        --health-start-period=40s \
-                        -e NODE_ENV=production \
-                        -e BUILD_NUMBER=${BUILD_NUMBER} \
-                        -e DEPLOYMENT_TIMESTAMP=${BUILD_TIMESTAMP} \
-                        -e BUILD_METHOD=${NODE_AVAILABLE} \
+                    if docker run -d \\
+                        --name plateforme-app-${APP_PORT} \\
+                        -p ${APP_PORT}:80 \\
+                        --restart=unless-stopped \\
+                        --health-cmd="curl -f http://localhost/ || exit 1" \\
+                        --health-interval=30s \\
+                        --health-timeout=10s \\
+                        --health-retries=3 \\
+                        --health-start-period=40s \\
+                        -e NODE_ENV=production \\
+                        -e BUILD_NUMBER=${BUILD_NUMBER} \\
+                        -e DEPLOYMENT_TIMESTAMP=${BUILD_TIMESTAMP} \\
+                        -e BUILD_METHOD=${NODE_AVAILABLE} \\
                         plateforme-location:${BUILD_NUMBER}; then
                         echo "     ✅ NOUVEAU CONTENEUR DÉMARRÉ"
                         echo "     📊 Image: plateforme-location:${BUILD_NUMBER}"
