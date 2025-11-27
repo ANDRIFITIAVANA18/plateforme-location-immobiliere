@@ -246,15 +246,15 @@ pipeline {
     steps {
         script {
             echo "🚀 DÉPLOIEMENT LOCAL sur port ${APP_PORT}"
-            
-            sh """
+
+            sh '''
                 echo "🔧 PRÉPARATION DÉPLOIEMENT"
-                
+
                 # 1. Arrêt forcé de l'ancien conteneur
                 echo "🛑 Arrêt de l'ancien conteneur..."
                 docker stop plateforme-app-${APP_PORT} 2>/dev/null || echo "Aucun conteneur à arrêter"
                 docker rm plateforme-app-${APP_PORT} 2>/dev/null || echo "Aucun conteneur à supprimer"
-                
+
                 # 2. Vérification que l'image existe
                 echo "🔍 Vérification de l'image..."
                 if docker images | grep -q "plateforme-location.*${BUILD_NUMBER}"; then
@@ -263,58 +263,60 @@ pipeline {
                     echo "❌ Image non trouvée, reconstruction..."
                     docker build -t plateforme-location:${BUILD_NUMBER} .
                 fi
-                
+
                 # 3. Vérification du port
                 echo "🔍 Vérification du port..."
-                if docker ps --format 'table {{.Ports}}' | grep -q ":${APP_PORT}->"; then
+                if docker ps --format "table {{.Ports}}" | grep -q ":${APP_PORT}->"; then
                     echo "⚠️ Port déjà utilisé, libération..."
                     docker stop $(docker ps -q --filter publish=${APP_PORT}) 2>/dev/null || true
                 fi
-                
+
                 # 4. Déploiement avec timeout
                 echo "🚀 Lancement du conteneur..."
-                docker run -d \\
-                    --name plateforme-app-${APP_PORT} \\
-                    -p ${APP_PORT}:80 \\
+                docker run -d \
+                    --name plateforme-app-${APP_PORT} \
+                    -p ${APP_PORT}:80 \
                     plateforme-location:${BUILD_NUMBER}
-                
+
                 # 5. Vérification du démarrage
                 echo "⏳ Attente du démarrage (10 secondes)..."
                 sleep 10
-                
+
                 # 6. Vérification détaillée
                 echo "📊 STATUT DÉTAILLÉ:"
-                docker ps -a --filter name=plateforme-app-${APP_PORT} --format 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'
-                
+                docker ps -a --filter "name=plateforme-app-${APP_PORT}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
                 # 7. Vérification des logs
                 echo "📋 LOGS (dernières lignes):"
                 docker logs plateforme-app-${APP_PORT} --tail 20 2>/dev/null || echo "Impossible de récupérer les logs"
-                
+
                 # 8. Test de santé avec retry
                 echo "🔍 TEST DE SANTÉ..."
                 MAX_RETRIES=5
                 COUNTER=0
-                while [ \$COUNTER -lt \$MAX_RETRIES ]; do
+
+                while [ $COUNTER -lt $MAX_RETRIES ]; do
                     if curl -f http://localhost:${APP_PORT} > /dev/null 2>&1; then
                         echo "✅ APPLICATION ACCESSIBLE!"
                         echo "URL: http://localhost:${APP_PORT}"
                         break
                     else
-                        echo "Tentative \$((COUNTER+1))/\$MAX_RETRIES..."
+                        echo "Tentative $((COUNTER+1))/$MAX_RETRIES..."
                         sleep 5
-                        COUNTER=\$((COUNTER+1))
+                        COUNTER=$((COUNTER+1))
                     fi
                 done
-                
-                if [ \$COUNTER -eq \$MAX_RETRIES ]; then
+
+                if [ $COUNTER -eq $MAX_RETRIES ]; then
                     echo "Application lente à démarrer, mais conteneur actif"
                     echo "URL: http://localhost:${APP_PORT}"
                     echo "Vérifiez manuellement dans quelques secondes"
                 fi
-            """
+            '''
         }
     }
 }
+
     }
     
     post {
