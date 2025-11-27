@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     triggers {
-        githubPush()
         pollSCM('H/1 * * * *')
     }
 
@@ -10,23 +9,12 @@ pipeline {
         NODE_ENV = 'production'
         CI = 'true'
         APP_PORT = '3100'
-        DOCKER_HOST = "tcp://localhost:2375"
-        DOCKER_TLS_VERIFY = "0"
     }
 
     stages {
-
-        stage('🔍 Checkout Git') {
+        stage('📥 Checkout SCM') {
             steps {
-                echo "📥 Clonage ou mise à jour du dépôt Git"
-                sh '''
-                    if [ ! -d ".git" ]; then
-                        git clone https://github.com/ANDRIFITIAVANA18/plateforme-location-immobiliere.git .
-                    else
-                        git fetch origin
-                        git reset --hard origin/main
-                    fi
-                '''
+                checkout scm
             }
         }
 
@@ -34,18 +22,12 @@ pipeline {
             steps {
                 sh '''
                     echo "🛠️ Vérification Docker..."
-                    if docker version >/dev/null 2>&1; then
-                        echo "✅ Docker accessible"
-                    else
-                        echo "⚠️ Docker non accessible, tentative via TCP..."
-                        export DOCKER_HOST="tcp://localhost:2375"
-                        docker version || echo "❌ Docker toujours inaccessible"
-                    fi
+                    docker --version && echo "✅ Docker disponible"
                 '''
             }
         }
 
-        stage('📥 Installation Dépendances Node.js') {
+        stage('📥 Installation Dépendances') {
             steps {
                 sh '''
                     echo "🔧 Installation des dépendances Node.js"
@@ -75,12 +57,13 @@ pipeline {
                 sh '''
                     echo "🔨 Build production"
                     docker run --rm -v $(pwd):/app -w /app node:18-alpine sh -c "
-                        npm run build || echo '⚠️ Build échoué'
+                        npm run build
+                        echo '✅ Build réussi'
                     "
                 '''
                 sh '''
                     if [ -d "dist" ]; then
-                        echo "📁 Build terminé"
+                        echo "📁 Build créé dans dist/"
                         ls -la dist/
                     else
                         echo "❌ Aucun build détecté"
@@ -101,6 +84,7 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 EOF
                     docker build -t plateforme-location:${BUILD_NUMBER} .
+                    echo "✅ Image créée: plateforme-location:${BUILD_NUMBER}"
                 '''
             }
         }
@@ -114,21 +98,20 @@ EOF
                     docker stop plateforme-app-${APP_PORT} 2>/dev/null || true
                     docker rm plateforme-app-${APP_PORT} 2>/dev/null || true
 
-                    # Libération du port si occupé
-                    if docker ps --format "table {{.Ports}}" | grep -q ":${APP_PORT}->"; then
-                        docker stop $(docker ps -q --filter publish=${APP_PORT}) || true
-                    fi
-
                     # Lancement du conteneur
                     docker run -d \
                         --name plateforme-app-${APP_PORT} \
                         -p ${APP_PORT}:80 \
                         plateforme-location:${BUILD_NUMBER}
 
-                    # Vérification du démarrage
+                    # Vérification
                     echo "⏳ Attente du démarrage..."
                     sleep 10
-                    docker ps -a --filter "name=plateforme-app-${APP_PORT}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+                    
+                    echo "📊 Statut du conteneur:"
+                    docker ps --filter name=plateforme-app-${APP_PORT}
+                    
+                    echo "🌐 Application déployée sur: http://localhost:${APP_PORT}"
                 '''
             }
         }
@@ -136,18 +119,13 @@ EOF
 
     post {
         always {
-            echo "🏁 Pipeline terminé"
-            sh '''
-                echo "🧹 Nettoyage conteneurs et images inutiles"
-                docker ps -aq --filter status=exited | xargs -r docker rm 2>/dev/null || true
-                docker images -q --filter dangling=true | xargs -r docker rmi 2>/dev/null || true
-            '''
+            echo "🏁 Pipeline terminé - Build #${BUILD_NUMBER}"
         }
         success {
-            echo "🎉 Déploiement réussi! URL: http://localhost:${APP_PORT}"
+            echo "🎉 SUCCÈS! Application disponible sur: http://localhost:${APP_PORT}"
         }
         failure {
-            echo "❌ Échec du pipeline. Vérifiez Docker, Git, et les permissions"
+            echo "❌ Échec - Vérifiez les logs ci-dessus"
         }
     }
 }
