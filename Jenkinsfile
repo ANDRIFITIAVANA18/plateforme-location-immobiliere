@@ -2,8 +2,8 @@ pipeline {
     agent any
     
     triggers {
-        pollSCM('H/1 * * * *')  // ✅ Surveillance Git toutes les heures
-        cron('H 6 * * *')       // ✅ Build quotidien à 6h du matin
+        pollSCM('H/1 * * * *')  //  Surveillance Git toutes les heures
+        cron('H 6 * * *')       //  Build quotidien à 6h du matin
     }
     
     environment {
@@ -17,14 +17,14 @@ pipeline {
         timeout(time: 30, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
-        retry(2)  // ✅ Retry automatique en cas d'échec
+        retry(2)  //  Retry automatique en cas d'échec
     }
     
     stages {
-        stage('🔍 Analyse Intelligence Git') {
+        stage(' Analyse Intelligence Git') {
             steps {
                 script {
-                    echo "🎯 DÉPLOIEMENT INTELLIGENT - Build #${BUILD_NUMBER}"
+                    echo " DÉPLOIEMENT INTELLIGENT - Build #${BUILD_NUMBER}"
                     currentBuild.displayName = "#${BUILD_NUMBER} - ${env.BUILD_TIMESTAMP}"
                     
                     // Détection automatique du type de déclenchement
@@ -32,29 +32,29 @@ pipeline {
                     def causeClass = buildCause.getClass().toString()
                     
                     if (causeClass.contains('SCMTriggerCause')) {
-                        echo "🔄 DÉCLENCHÉ AUTOMATIQUEMENT - Changements Git détectés"
+                        echo " DÉCLENCHÉ AUTOMATIQUEMENT - Changements Git détectés"
                         currentBuild.description = "Auto: Changements détectés dans le code"
                     } else if (causeClass.contains('UserIdCause')) {
-                        echo "👤 DÉCLENCHÉ MANUELLEMENT - Action utilisateur"
+                        echo " DÉCLENCHÉ MANUELLEMENT - Action utilisateur"
                         currentBuild.description = "Manuel: Déclenché par ${buildCause.userName}"
                     } else {
-                        echo "⏰ DÉCLENCHÉ PAR CRON - Maintenance programmée"
+                        echo " DÉCLENCHÉ PAR CRON - Maintenance programmée"
                         currentBuild.description = "Programmé: Build de maintenance"
                     }
                 }
                 
                 sh '''
-                    echo "📊 ANALYSE DU DÉPÔT GIT"
+                    echo " ANALYSE DU DÉPÔT GIT"
                     echo "========================================"
-                    echo "🔀 Branche: $GIT_BRANCH"
-                    echo "📝 Commit: $(git log -1 --pretty=format:'%h - %s')"
-                    echo "👤 Auteur: $(git log -1 --pretty=format:'%an')"
-                    echo "📅 Date: $(git log -1 --pretty=format:'%ci')"
+                    echo " Branche: $GIT_BRANCH"
+                    echo " Commit: $(git log -1 --pretty=format:'%h - %s')"
+                    echo " Auteur: $(git log -1 --pretty=format:'%an')"
+                    echo " Date: $(git log -1 --pretty=format:'%ci')"
                     
-                    echo "📁 Fichiers modifiés récemment:"
+                    echo " Fichiers modifiés récemment:"
                     git diff --name-only HEAD~1 HEAD 2>/dev/null | head -10 || echo "Nouveau commit ou première build"
                     
-                    echo "📦 Métriques du projet:"
+                    echo " Métriques du projet:"
                     echo "   - Dossier src: $(find src -type f 2>/dev/null | wc -l || echo 0) fichiers"
                     echo "   - Package.json: $(wc -l < package.json 2>/dev/null || echo 0) lignes"
                     echo "   - Dependencies: $(cat package.json 2>/dev/null | grep -o '"dependencies"' | wc -l || echo 0) blocs"
@@ -62,51 +62,51 @@ pipeline {
             }
         }
         
-        stage('🐳 Vérification Environnement') {
+        stage(' Vérification Environnement') {
             steps {
                 sh '''
-                    echo "🔧 DIAGNOSTIC COMPLET DE L'ENVIRONNEMENT"
+                    echo " DIAGNOSTIC COMPLET DE L'ENVIRONNEMENT"
                     echo "========================================"
                     
-                    echo "🖥️  SYSTÈME:"
+                    echo "  SYSTÈME:"
                     echo "   - Date: $(date)"
                     echo "   - Répertoire: $(pwd)"
                     echo "   - Utilisateur: $(whoami)"
                     
-                    echo "🔍 VÉRIFICATION NODE.JS:"
+                    echo " VÉRIFICATION NODE.JS:"
                     if command -v node >/dev/null 2>&1; then
-                        echo "   - ✅ Node.js: $(node --version)"
+                        echo "   -  Node.js: $(node --version)"
                     else
-                        echo "   - ❌ Node.js: NON INSTALLÉ"
+                        echo "   -  Node.js: NON INSTALLÉ"
                     fi
                     
                     if command -v npm >/dev/null 2>&1; then
-                        echo "   - ✅ NPM: $(npm --version)"
+                        echo "   -  NPM: $(npm --version)"
                     else
-                        echo "   - ❌ NPM: NON INSTALLÉ"
+                        echo "   -  NPM: NON INSTALLÉ"
                     fi
                     
-                    echo "🐳 DOCKER:"
-                    docker --version || echo "   - ❌ Docker non disponible"
+                    echo " DOCKER:"
+                    docker --version || echo "   -  Docker non disponible"
                     echo "   - Engine: $(docker system info --format '{{.ServerVersion}}' 2>/dev/null || echo 'Non disponible')"
                     echo "   - Containers: $(docker system info --format '{{.ContainersRunning}}/{{.Containers}} running' 2>/dev/null || echo 'Non disponible')"
                     
-                    echo "📊 RESSOURCES:"
+                    echo "RESSOURCES:"
                     docker system df 2>/dev/null || echo "   - Docker non accessible"
                     
-                    echo "🔌 PORTS:"
+                    echo "PORTS:"
                     netstat -tuln 2>/dev/null | grep ":3101" >/dev/null && echo "   - Port 3101: Occupé" || echo "   - Port 3101: Libre"
                     netstat -tuln 2>/dev/null | grep ":9090" >/dev/null && echo "   - Port 9090: Occupé" || echo "   - Port 9090: Libre"
                     
-                    echo "✅ DIAGNOSTIC TERMINÉ"
+                    echo " DIAGNOSTIC TERMINÉ"
                 '''
             }
         }
         
-        stage('🔍 Vérification Node.js') {
+        stage(' Vérification Node.js') {
             steps {
                 script {
-                    echo "🔍 TEST DE DISPONIBILITÉ NODE.JS"
+                    echo " TEST DE DISPONIBILITÉ NODE.JS"
                     
                     // Test complet de Node.js et npm
                     def nodeCheck = sh(
@@ -123,45 +123,45 @@ pipeline {
                     )
                     
                     env.NODE_AVAILABLE = (nodeCheck == 0).toString()
-                    echo "📊 RÉSULTAT DU TEST: Node.js disponible = ${env.NODE_AVAILABLE}"
+                    echo " RÉSULTAT DU TEST: Node.js disponible = ${env.NODE_AVAILABLE}"
                     
                     if (env.NODE_AVAILABLE == 'true') {
-                        echo "🎯 STRATÉGIE: Utilisation de Node.js LOCAL pour le build"
+                        echo " STRATÉGIE: Utilisation de Node.js LOCAL pour le build"
                         currentBuild.description = "${currentBuild.description} | Build: Node.js Local"
                     } else {
-                        echo "🐳 STRATÉGIE: Utilisation de DOCKER pour le build"
+                        echo " STRATÉGIE: Utilisation de DOCKER pour le build"
                         currentBuild.description = "${currentBuild.description} | Build: Docker"
                     }
                 }
             }
         }
         
-        stage('📦 Installation Dépendances') {
+        stage(' Installation Dépendances') {
             steps {
                 script {
                     if (env.NODE_AVAILABLE == 'true') {
-                        echo "🎯 UTILISATION DE NODE.JS LOCAL"
+                        echo " UTILISATION DE NODE.JS LOCAL"
                         sh '''
-                            echo "📥 INSTALLATION AVEC NPM LOCAL..."
+                            echo " INSTALLATION AVEC NPM LOCAL..."
                             echo "   - Répertoire: $(pwd)"
                             echo "   - Fichiers package:"
                             ls -la package*.json 2>/dev/null || echo "     Aucun fichier package trouvé"
                             
                             echo "   - Installation en cours..."
                             if npm install --silent --no-progress --no-audit --no-fund; then
-                                echo "   - ✅ DÉPENDANCES INSTALLÉES AVEC SUCCÈS"
-                                echo "   - 📊 Nombre de dépendances: $(npm list --depth=0 2>/dev/null | wc -l) modules"
+                                echo "   -  DÉPENDANCES INSTALLÉES AVEC SUCCÈS"
+                                echo "   - Nombre de dépendances: $(npm list --depth=0 2>/dev/null | wc -l) modules"
                             else
-                                echo "   - ⚠️  Échec npm install standard, tentative avec --legacy-peer-deps"
+                                echo "   -   Échec npm install standard, tentative avec --legacy-peer-deps"
                                 npm install --legacy-peer-deps --silent --no-progress --no-audit --no-fund
                             fi
                             
-                            echo "   - 📁 Dossier node_modules créé: $(ls -la node_modules 2>/dev/null | head -5 | wc -l) éléments"
+                            echo "   -  Dossier node_modules créé: $(ls -la node_modules 2>/dev/null | head -5 | wc -l) éléments"
                         '''
                     } else {
-                        echo "🐳 UTILISATION DE DOCKER POUR LES DÉPENDANCES"
+                        echo " UTILISATION DE DOCKER POUR LES DÉPENDANCES"
                         sh '''
-                            echo "📥 INSTALLATION DES DÉPENDANCES VIA DOCKER..."
+                            echo " INSTALLATION DES DÉPENDANCES VIA DOCKER..."
                             echo "   - Utilisation de l'image: node:18-alpine"
                             echo "   - Montage du volume: $(pwd) → /app"
                             
@@ -180,46 +180,46 @@ pipeline {
                                     (echo '=== ÉCHEC CRITIQUE ===' && \
                                     echo 'Dernière tentative avec verbose...' && \
                                     npm install --legacy-peer-deps --no-audit --no-fund))
-                                " && echo "   - ✅ DÉPENDANCES INSTALLÉES" || {
-                                    echo "   - ❌ ÉCHEC CRITIQUE: Impossible d'installer les dépendances"
-                                    echo "   - 📋 Debug:"
+                                " && echo "   - DÉPENDANCES INSTALLÉES" || {
+                                    echo "   -  ÉCHEC CRITIQUE: Impossible d'installer les dépendances"
+                                    echo "   -  Debug:"
                                     echo "     - Vérifier la connexion internet"
                                     echo "     - Vérifier package.json"
                                     echo "     - Tester manuellement: docker run -it --rm -v \$(pwd):/app -w /app node:18-alpine sh"
                                     exit 1
                                 }
                             
-                            echo "   - 📊 Vérification: $(find node_modules -maxdepth 2 -type d 2>/dev/null | wc -l) dossiers créés"
+                            echo "   -  Vérification: $(find node_modules -maxdepth 2 -type d 2>/dev/null | wc -l) dossiers créés"
                         '''
                     }
                 }
             }
         }
         
-        stage('🏗️ Build Application') {
+        stage(' Build Application') {
             steps {
                 script {
                     if (env.NODE_AVAILABLE == 'true') {
-                        echo "🎯 BUILD AVEC NODE.JS LOCAL"
+                        echo " BUILD AVEC NODE.JS LOCAL"
                         sh '''
-                            echo "🏗️ CONSTRUCTION DE L'APPLICATION EN LOCAL..."
+                            echo " CONSTRUCTION DE L'APPLICATION EN LOCAL..."
                             echo "   - Exécution: npm run build"
                             
                             if npm run build; then
-                                echo "   - ✅ APPLICATION CONSTRUITE AVEC SUCCÈS"
-                                echo "   - 📁 Contenu du dossier dist:"
+                                echo "   -  APPLICATION CONSTRUITE AVEC SUCCÈS"
+                                echo "   -  Contenu du dossier dist:"
                                 ls -la dist/ 2>/dev/null && echo "     - Fichiers: $(find dist/ -type f 2>/dev/null | wc -l)" || echo "     - Dossier dist non trouvé"
                             else
-                                echo "   - ❌ ÉCHEC DU BUILD LOCAL"
-                                echo "   - 📋 Logs de build:"
+                                echo "   -  ÉCHEC DU BUILD LOCAL"
+                                echo "   -  Logs de build:"
                                 cat package.json | grep '"scripts"' || echo "     Scripts non trouvés"
                                 exit 1
                             fi
                         '''
                     } else {
-                        echo "🐳 BUILD VIA DOCKER"
+                        echo " BUILD VIA DOCKER"
                         sh '''
-                            echo "🏗️ CONSTRUCTION VIA DOCKER..."
+                            echo " CONSTRUCTION VIA DOCKER..."
                             echo "   - Image: node:18-alpine"
                             echo "   - Commande: npm run build"
                             
@@ -229,12 +229,12 @@ pipeline {
                                 -e NODE_ENV=production \
                                 node:18-alpine \
                                 npm run build; then
-                                echo "   - ✅ APPLICATION CONSTRUITE VIA DOCKER"
-                                echo "   - 📁 Contenu du dossier dist:"
+                                echo "   -  APPLICATION CONSTRUITE VIA DOCKER"
+                                echo "   -  Contenu du dossier dist:"
                                 ls -la dist/ 2>/dev/null && echo "     - Fichiers: $(find dist/ -type f 2>/dev/null | wc -l)" || echo "     - Dossier dist non trouvé"
                             else
-                                echo "   - ❌ ÉCHEC DU BUILD DOCKER"
-                                echo "   - 📋 Debug:"
+                                echo "   -  ÉCHEC DU BUILD DOCKER"
+                                echo "   -  Debug:"
                                 echo "     - Vérifier que npm install a réussi"
                                 echo "     - Vérifier les scripts dans package.json"
                                 exit 1
@@ -245,13 +245,13 @@ pipeline {
             }
         }
         
-        stage('🐳 Construction Image Docker') {
+        stage(' Construction Image Docker') {
             steps {
                 sh '''
-                    echo "🐳 CONSTRUCTION DE L'IMAGE DOCKER DE PRODUCTION"
+                    echo " CONSTRUCTION DE L'IMAGE DOCKER DE PRODUCTION"
                     echo "========================================"
                     
-                    echo "📋 CRÉATION DU DOCKERFILE OPTIMISÉ..."
+                    echo "CRÉATION DU DOCKERFILE OPTIMISÉ..."
                     cat > Dockerfile << 'EOF'
 # Image de production légère
 FROM nginx:alpine
@@ -315,42 +315,42 @@ EOF
                     echo "   - Méthode de build précédente: ${NODE_AVAILABLE}"
                     
                     if docker build --no-cache -t plateforme-location:${BUILD_NUMBER} . ; then
-                        echo "   - ✅ IMAGE CONSTRUITE AVEC SUCCÈS"
+                        echo "   -  IMAGE CONSTRUITE AVEC SUCCÈS"
                     else
-                        echo "   - ⚠️  Échec avec --no-cache, tentative sans cache"
+                        echo "   -   Échec avec --no-cache, tentative sans cache"
                         docker build -t plateforme-location:${BUILD_NUMBER} . || exit 1
                     fi
                     
-                    echo "🏷️  APPLICATION DES TAGS..."
-                    docker tag plateforme-location:${BUILD_NUMBER} plateforme-location:latest && echo "   - ✅ Tag 'latest' appliqué"
-                    docker tag plateforme-location:${BUILD_NUMBER} plateforme-location:production && echo "   - ✅ Tag 'production' appliqué"
-                    docker tag plateforme-location:${BUILD_NUMBER} plateforme-location:${BUILD_TIMESTAMP} && echo "   - ✅ Tag '${BUILD_TIMESTAMP}' appliqué"
+                    echo "  APPLICATION DES TAGS..."
+                    docker tag plateforme-location:${BUILD_NUMBER} plateforme-location:latest && echo "   -  Tag 'latest' appliqué"
+                    docker tag plateforme-location:${BUILD_NUMBER} plateforme-location:production && echo "   -  Tag 'production' appliqué"
+                    docker tag plateforme-location:${BUILD_NUMBER} plateforme-location:${BUILD_TIMESTAMP} && echo "   -  Tag '${BUILD_TIMESTAMP}' appliqué"
                     
-                    echo "📊 MÉTRIQUES DE L'IMAGE:"
+                    echo " MÉTRIQUES DE L'IMAGE:"
                     docker images plateforme-location --format "table {{.Tag}}\\t{{.Size}}\\t{{.CreatedAt}}" | head -10
                     
-                    echo "✅ IMAGE DOCKER PRÊTE POUR LE DÉPLOIEMENT"
+                    echo " IMAGE DOCKER PRÊTE POUR LE DÉPLOIEMENT"
                 '''
             }
         }
         
-        stage('🚀 Déploiement Stratégique') {
+        stage(' Déploiement Stratégique') {
             steps {
                 sh '''
-                    echo "🚀 STRATÉGIE DE DÉPLOIEMENT INTELLIGENT"
+                    echo " STRATÉGIE DE DÉPLOIEMENT INTELLIGENT"
                     echo "========================================"
                     
-                    echo "🎯 PHASE 1: PRÉPARATION"
+                    echo " PHASE 1: PRÉPARATION"
                     echo "   - Arrêt progressif de l'ancienne version..."
                     if docker stop plateforme-app-${APP_PORT} 2>/dev/null; then
-                        echo "     ✅ Ancien conteneur arrêté"
+                        echo "      Ancien conteneur arrêté"
                         sleep 5
-                        docker rm plateforme-app-${APP_PORT} 2>/dev/null && echo "     ✅ Ancien conteneur supprimé"
+                        docker rm plateforme-app-${APP_PORT} 2>/dev/null && echo "      Ancien conteneur supprimé"
                     else
-                        echo "     ℹ️  Aucun conteneur à arrêter"
+                        echo " Aucun conteneur à arrêter"
                     fi
                     
-                    echo "🎯 PHASE 2: DÉPLOIEMENT"
+                    echo " PHASE 2: DÉPLOIEMENT"
                     echo "   - Lancement de la nouvelle version..."
                     if docker run -d \
                         --name plateforme-app-${APP_PORT} \
@@ -366,25 +366,25 @@ EOF
                         -e DEPLOYMENT_TIMESTAMP=${BUILD_TIMESTAMP} \
                         -e BUILD_METHOD=${NODE_AVAILABLE} \
                         plateforme-location:${BUILD_NUMBER}; then
-                        echo "     ✅ NOUVEAU CONTENEUR DÉMARRÉ"
-                        echo "     📊 Image: plateforme-location:${BUILD_NUMBER}"
-                        echo "     🔧 Port: ${APP_PORT}"
+                        echo "      NOUVEAU CONTENEUR DÉMARRÉ"
+                        echo "      Image: plateforme-location:${BUILD_NUMBER}"
+                        echo "      Port: ${APP_PORT}"
                     else
-                        echo "     ❌ ÉCHEC DU DÉMARRAGE DU CONTENEUR"
+                        echo "      ÉCHEC DU DÉMARRAGE DU CONTENEUR"
                         exit 1
                     fi
                     
-                    echo "🎯 PHASE 3: VÉRIFICATION"
+                    echo " PHASE 3: VÉRIFICATION"
                     echo "   - Attente du démarrage..."
                     sleep 10
                     
                     echo "   - Vérification du statut..."
                     RESTART_POLICY=$(docker inspect plateforme-app-${APP_PORT} --format "{{.HostConfig.RestartPolicy.Name}}" 2>/dev/null || echo "Non disponible")
                     HEALTH_STATUS=$(docker inspect plateforme-app-${APP_PORT} --format "{{.State.Health.Status}}" 2>/dev/null || echo "Non disponible")
-                    echo "     ✅ Restart Policy: $RESTART_POLICY"
-                    echo "     ✅ Health Status: $HEALTH_STATUS"
+                    echo "      Restart Policy: $RESTART_POLICY"
+                    echo "      Health Status: $HEALTH_STATUS"
                     
-                    echo "🎯 PHASE 4: TESTS DE SANTÉ"
+                    echo " PHASE 4: TESTS DE SANTÉ"
                     echo "   - Tests de connectivité avancés..."
                     MAX_RETRIES=8
                     COUNTER=0
@@ -392,79 +392,79 @@ EOF
                     
                     while [ $COUNTER -lt $MAX_RETRIES ]; do
                         COUNTER=$((COUNTER + 1))
-                        echo "     🔄 Test de santé (Tentative $COUNTER/$MAX_RETRIES)..."
+                        echo "      Test de santé (Tentative $COUNTER/$MAX_RETRIES)..."
                         
                         RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${APP_PORT} || echo "000")
                         
                         if [ "$RESPONSE_CODE" = "200" ] || [ "$RESPONSE_CODE" = "304" ]; then
-                            echo "     ✅ ✅ ✅ APPLICATION ACCESSIBLE (HTTP $RESPONSE_CODE)"
+                            echo "APPLICATION ACCESSIBLE (HTTP $RESPONSE_CODE)"
                             SUCCESS=true
                             break
                         else
-                            echo "     ⏳ Application en démarrage... (HTTP $RESPONSE_CODE)"
+                            echo "Application en démarrage... (HTTP $RESPONSE_CODE)"
                             sleep 5
                         fi
                     done
                     
                     if [ "$SUCCESS" = "false" ]; then
-                        echo "     ⚠️  Application lente à répondre après $MAX_RETRIES tentatives"
-                        echo "     📋 Derniers logs:"
+                        echo "  Application lente à répondre après $MAX_RETRIES tentatives"
+                        echo "  Derniers logs:"
                         docker logs plateforme-app-${APP_PORT} --tail 10 2>/dev/null || echo "       Aucun log disponible"
                     fi
                     
-                    echo "✅ DÉPLOIEMENT STRATÉGIQUE TERMINÉ"
+                    echo " DÉPLOIEMENT STRATÉGIQUE TERMINÉ"
                 '''
             }
         }
         
-        stage('📊 Validation et Métriques Finales') {
+        stage('Validation et Métriques Finales') {
             steps {
                 script {
                     def buildMethod = env.NODE_AVAILABLE == 'true' ? 'Node.js Local' : 'Docker'
-                    def buildMethodEmoji = env.NODE_AVAILABLE == 'true' ? 'Node.js Local 🚀' : 'Docker 🐳'
+                    def buildMethodEmoji = env.NODE_AVAILABLE == 'true' ? 'Node.js Local ' : 'Docker '
                     
                     sh """
-                    echo "📊 RAPPORT FINAL DE DÉPLOIEMENT"
+                    echo "RAPPORT FINAL DE DÉPLOIEMENT"
                     echo "========================================"
                     
-                    echo "🌐 INFORMATIONS D'ACCÈS:"
-                    echo "   - 🌍 Application: http://localhost:${APP_PORT}"
-                    echo "   - ⚙️  Jenkins: http://localhost:${JENKINS_PORT}"
-                    echo "   - 🐳 Image: plateforme-location:${BUILD_NUMBER}"
+                    echo " INFORMATIONS D'ACCÈS:"
+                    echo "   -  Application: http://localhost:${APP_PORT}"
+                    echo "   -   Jenkins: http://localhost:${JENKINS_PORT}"
+                    echo "   - Image: plateforme-location:${BUILD_NUMBER}"
                     
-                    echo "📈 MÉTRIQUES DE PERFORMANCE:"
-                    echo "   - ⏱️  Temps de build: ${currentBuild.durationString}"
-                    echo "   - 🔢 Build number: #${BUILD_NUMBER}"
-                    echo "   - 🕐 Timestamp: ${BUILD_TIMESTAMP}"
-                    echo "   - 🛠️  Méthode de build: ${buildMethod}"
+                    echo " MÉTRIQUES DE PERFORMANCE:"
+                    echo "   -   Temps de build: ${currentBuild.durationString}"
+                    echo "   -  Build number: #${BUILD_NUMBER}"
+                    echo "   -  Timestamp: ${BUILD_TIMESTAMP}"
+                    echo "   -   Méthode de build: ${buildMethod}"
                     
                     echo "🔧 ÉTAT DU SYSTÈME:"
                     CONTAINER_STATUS=\$(docker inspect plateforme-app-${APP_PORT} --format "Status: {{.State.Status}} | Depuis: {{.State.StartedAt}}" 2>/dev/null || echo "Conteneur non disponible")
-                    echo "   - 📦 Conteneur: \$CONTAINER_STATUS"
+                    echo "   -  Conteneur: \$CONTAINER_STATUS"
                     
-                    echo "🛡️  GARANTIES ACTIVÉES:"
-                    echo "   - ✅ Redémarrage automatique"
-                    echo "   - ✅ Health checks"
-                    echo "   - ✅ Surveillance 24/7"
-                    echo "   - ✅ Sécurité (non-root)"
-                    echo "   - ✅ Logs centralisés"
-                    echo "   - ✅ Build: ${buildMethodEmoji}"
+                    echo "  GARANTIES ACTIVÉES:"
+                    echo "   -  Redémarrage automatique"
+                    echo "   -  Health checks"
+                    echo "   -  Surveillance 24/7"
+                    echo "   -  Sécurité (non-root)"
+                    echo "   -  Logs centralisés"
+                    echo "   -  Build: ${buildMethodEmoji}"
                     
-                    echo "📋 MAINTENANCE:"
-                    echo "   - 🔄 Vérification Git: Toutes les heures"
-                    echo "   - 🕕 Build maintenance: 6h quotidien"
-                    echo "   - 🧹 Historique: 20 builds conservés"
+                    echo " MAINTENANCE:"
+                    echo "   -  Vérification Git: Toutes les heures"
+                    echo "   -  Build maintenance: 6h quotidien"
+                    echo "   -  Historique: 20 builds conservés"
                     
-                    echo "🎯 STATUT: DÉPLOIEMENT RÉUSSI ✅"
+                    echo " STATUT: DÉPLOIEMENT RÉUSSI "
                     """
                     
                     // Test final de validation
                     sh """
-                    echo "🔍 TEST FINAL DE VALIDATION..."
+                    echo " TEST FINAL DE VALIDATION..."
                     if curl -f -s http://localhost:${APP_PORT} > /dev/null; then
-                        echo "🎉 ✅ APPLICATION EN PRODUCTION ET OPÉRATIONNELLE"
+                        echo " APPLICATION EN PRODUCTION ET OPÉRATIONNELLE"
                     else
-                        echo "⚠️  APPLICATION DÉPLOYÉE MAIS VÉRIFICATION MANUELLE RECOMMANDÉE"
+                        echo " APPLICATION DÉPLOYÉE MAIS VÉRIFICATION MANUELLE RECOMMANDÉE"
                     fi
                     """
                 }
@@ -474,17 +474,17 @@ EOF
     
     post {
         always {
-            echo "🏁 CYCLE DE DÉPLOIEMENT TERMINÉ"
+            echo " CYCLE DE DÉPLOIEMENT TERMINÉ"
             script {
                 def buildMethod = env.NODE_AVAILABLE == 'true' ? 'Node.js Local' : 'Docker'
                 sh """
-                echo "🧹 NETTOYAGE INTELLIGENT..."
-                rm -f Dockerfile 2>/dev/null && echo "✅ Fichiers temporaires nettoyés" || echo "ℹ️  Aucun fichier à nettoyer"
+                echo " NETTOYAGE INTELLIGENT..."
+                rm -f Dockerfile 2>/dev/null && echo " Fichiers temporaires nettoyés" || echo "  Aucun fichier à nettoyer"
                 
-                echo "📊 SANTÉ DU SYSTÈME:"
-                docker system df 2>/dev/null || echo "ℹ️  Métriques Docker non disponibles"
+                echo " SANTÉ DU SYSTÈME:"
+                docker system df 2>/dev/null || echo "  Métriques Docker non disponibles"
                 
-                echo "📈 STATISTIQUES:"
+                echo " STATISTIQUES:"
                 echo "   - Build: #${BUILD_NUMBER}"
                 echo "   - Durée: ${currentBuild.durationString}"
                 echo "   - Méthode: ${buildMethod}"
@@ -493,38 +493,38 @@ EOF
             }
         }
         success {
-            echo "🎉 DÉPLOIEMENT RÉUSSI! 🚀"
+            echo " DÉPLOIEMENT RÉUSSI! "
             script {
-                def buildMethod = env.NODE_AVAILABLE == 'true' ? 'Node.js Local 🚀' : 'Docker 🐳'
+                def buildMethod = env.NODE_AVAILABLE == 'true' ? 'Node.js Local ' : 'Docker '
                 
                 sh """
                 echo " "
-                echo "✅ ✅ ✅ MISSION ACCOMPLIE!"
+                echo " MISSION ACCOMPLIE!"
                 echo "========================================"
-                echo "🌟 DÉPLOIEMENT RÉALISÉ AVEC SUCCÈS"
+                echo " DÉPLOIEMENT RÉALISÉ AVEC SUCCÈS"
                 echo "   - Méthode: ${buildMethod}"
                 echo "   - Build: #${BUILD_NUMBER}"
                 echo "   - Timestamp: ${BUILD_TIMESTAMP}"
                 echo " "
-                echo "🌐 VOTRE APPLICATION EST MAINTENANT:"
-                echo "   - 🔄 Auto-redémarrante"
-                echo "   - 🏥 Auto-guérissante"
-                echo "   - 📈 Auto-surveillée"
-                echo "   - 🔧 Auto-maintenue"
+                echo " VOTRE APPLICATION EST MAINTENANT:"
+                echo "   -  Auto-redémarrante"
+                echo "   -  Auto-guérissante"
+                echo "   -  Auto-surveillée"
+                echo "   -  Auto-maintenue"
                 echo " "
-                echo "🎯 ACCÈS IMMÉDIAT:"
-                echo "   - 📱 Application: http://localhost:${APP_PORT}"
-                echo "   - ⚙️  Administration: http://localhost:${JENKINS_PORT}"
+                echo " ACCÈS IMMÉDIAT:"
+                echo "   -  Application: http://localhost:${APP_PORT}"
+                echo "   -   Administration: http://localhost:${JENKINS_PORT}"
                 echo " "
-                echo "🕐 DÉPLOIEMENT TERMINÉ: \$(date)"
+                echo " DÉPLOIEMENT TERMINÉ: \$(date)"
                 echo " "
                 """
             }
         }
         failure {
-            echo "❌ ÉCHEC - ANALYSE AUTOMATIQUE"
+            echo " ÉCHEC - ANALYSE AUTOMATIQUE"
             sh '''
-                echo "🔧 DIAGNOSTIC AUTOMATIQUE:"
+                echo " DIAGNOSTIC AUTOMATIQUE:"
                 echo "=== CONTENEURS ==="
                 docker ps -a --format "table {{.Names}}\\t{{.Status}}\\t{{.RunningFor}}\\t{{.Ports}}" | grep -E "(plateforme|NAME)" || echo "Aucun conteneur plateforme"
                 
@@ -542,7 +542,7 @@ EOF
             '''
         }
         cleanup {
-            echo "🧼 NETTOYAGE DES RESSOURCES TEMPORAIRES"
+            echo " NETTOYAGE DES RESSOURCES TEMPORAIRES"
         }
     }
 }
