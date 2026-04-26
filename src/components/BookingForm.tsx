@@ -1,6 +1,3 @@
-
-
-// src/components/BookingForm.tsx
 import { useState, useEffect } from 'react';
 import { X, Calendar, Users, Star, MapPin, Home, Sparkles, CheckCircle2, Bed, Bath } from 'lucide-react';
 import { Property, BookingFormData, User as UserType } from '../types';
@@ -162,26 +159,6 @@ export default function BookingForm({ propertyId, onNavigate, currentUser }: Boo
     }));
     setCurrentStep(2);
   };
-
-  // const handleMonthsCountChange = (months: number) => {
-  //   setFormData(prev => ({
-  //     ...prev,
-  //     months_count: months
-  //   }));
-
-  //   // Recalculer la date de fin si une date de début est déjà sélectionnée
-  //   if (prev.check_in) {
-  //     const start = new Date(prev.check_in);
-  //     const end = new Date(start);
-  //     end.setMonth(end.getMonth() + months);
-
-  //     setFormData(prevForm => ({
-  //       ...prevForm,
-  //       check_out: end.toISOString().split('T')[0]
-  //     }));
-  //   }
-  //   setCurrentStep(2);
-  // };
 
   const handleMonthsCountChange = (months: number) => {
   // Mettre à jour d'abord le nombre de mois
