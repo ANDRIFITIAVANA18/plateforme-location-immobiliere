@@ -1,6 +1,3 @@
-
-
-// src/pages/OwnerProperties.tsx
 import { Plus, Edit, Trash2, Eye, Calendar, Users, DollarSign, MapPin, Bed, Bath, Home, BookOpen, Filter, ChevronDown, Mail, Check, X, Clock, Ban, Star, TrendingUp, Building2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Property, Booking, User as UserType } from '../types';
@@ -151,10 +148,10 @@ export default function OwnerProperties({ ownerId, currentUser }: OwnerPropertie
         )
       );
 
-      alert(`✅ Réservation ${getStatusText(status)} avec succès`);
+      alert(` Réservation ${getStatusText(status)} avec succès`);
     } catch (error: any) {
       console.error('Error updating booking status:', error);
-      alert(`❌ Erreur lors de la mise à jour de la réservation: ${error.message}`);
+      alert(` Erreur lors de la mise à jour de la réservation: ${error.message}`);
     }
   };
 
@@ -313,7 +310,7 @@ export default function OwnerProperties({ ownerId, currentUser }: OwnerPropertie
                 ? 'bg-green-100 text-green-800 border-green-200' 
                 : 'bg-orange-100 text-orange-800 border-orange-200'
             }`}>
-              {property.is_available ? '🟢 Disponible' : '🟠 Occupé'}
+              {property.is_available ? ' Disponible' : ' Occupé'}
             </div>
             {pendingBookings.length > 0 && (
               <div className="bg-gradient-to-r from-[#ea80fc] to-purple-500 text-white px-3 py-1.5 rounded-xl text-xs font-semibold border border-[#ea80fc] backdrop-blur-sm shadow-sm">
@@ -612,7 +609,7 @@ export default function OwnerProperties({ ownerId, currentUser }: OwnerPropertie
               <div>
                 {filteredProperties.length === 0 ? (
                   <div className="text-center py-16 bg-white rounded-3xl border border-gray-200 shadow-sm">
-                    <div className="text-8xl mb-6">🏠</div>
+                    <div className="text-8xl mb-6"></div>
                     <h3 className="text-2xl font-bold text-gray-900 mb-4">Aucun bien immobilier</h3>
                     <p className="text-gray-600 text-lg mb-8 max-w-md mx-auto">
                       Commencez par ajouter votre première propriété 
