@@ -466,7 +466,7 @@ export default function AddPropertyForm({ ownerId, onPropertyAdded, onCancel }: 
             {error && (
               <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-xl animate-in fade-in-0">
                 <div className="flex items-center">
-                  <div className="text-red-500 text-sm mr-2">⚠️</div>
+                  <div className="text-red-500 text-sm mr-2"></div>
                   <p className="font-medium text-sm">{error}</p>
                 </div>
               </div>
@@ -558,7 +558,7 @@ export default function AddPropertyForm({ ownerId, onPropertyAdded, onCancel }: 
                     <div>
                       <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
                         <div className="flex items-center">
-                          <div className="text-green-600 text-sm mr-2">✅</div>
+                          <div className="text-green-600 text-sm mr-2"></div>
                           <div>
                             <p className="text-green-800 text-sm font-medium">
                               Adresse détectée automatiquement
@@ -617,7 +617,7 @@ export default function AddPropertyForm({ ownerId, onPropertyAdded, onCancel }: 
                         onClick={enableManualInput}
                         className="mt-3 text-sm text-[#ea80fc] hover:text-purple-600 font-medium"
                       >
-                        ✏️ Saisir l'adresse manuellement
+                         Saisir l'adresse manuellement
                       </button>
                     </div>
                   ) : (
@@ -625,7 +625,7 @@ export default function AddPropertyForm({ ownerId, onPropertyAdded, onCancel }: 
                     <div>
                       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
                         <div className="flex items-center">
-                          <div className="text-blue-600 text-sm mr-2">💡</div>
+                          <div className="text-blue-600 text-sm mr-2"></div>
                           <div>
                             <p className="text-blue-800 text-sm font-medium">
                               Saisie manuelle de l'adresse
@@ -689,7 +689,7 @@ export default function AddPropertyForm({ ownerId, onPropertyAdded, onCancel }: 
                           onClick={useDetectedAddress}
                           className="mt-3 text-sm text-gray-600 hover:text-gray-800 font-medium"
                         >
-                          ↩️ Revenir à l'adresse détectée
+                           Revenir à l'adresse détectée
                         </button>
                       )}
                     </div>
@@ -738,12 +738,12 @@ export default function AddPropertyForm({ ownerId, onPropertyAdded, onCancel }: 
                     onChange={(e) => setPropertyType(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#ea80fc]/20 focus:border-[#ea80fc] bg-white transition-all duration-300 group-hover:border-gray-400 appearance-none"
                   >
-                    <option value="apartment">🏢 Appartement</option>
-                    <option value="house">🏠 Maison</option>
-                    <option value="villa">🏡 Villa</option>
-                    <option value="studio">🔧 Studio</option>
-                    <option value="loft">🏭 Loft</option>
-                    <option value="chalet">⛰️ Chalet</option>
+                    <option value="apartment"> Appartement</option>
+                    <option value="house"> Maison</option>
+                    <option value="villa"> Villa</option>
+                    <option value="studio"> Studio</option>
+                    <option value="loft"> Loft</option>
+                    <option value="chalet"> Chalet</option>
                   </select>
                 </div>
               </div>
