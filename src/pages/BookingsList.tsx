@@ -1,5 +1,3 @@
-
-// src/pages/BookingsList.tsx
 import { useState, useEffect } from 'react';
 import { Calendar, MapPin, Euro, User, Edit, Trash2, Home, Save, X, Ban } from 'lucide-react';
 import { Booking, User as UserType, Property } from '../types';
