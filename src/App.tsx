@@ -1,6 +1,3 @@
-
-
-// src/App.tsx
 import { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import HomePage from './components/HomePage';
@@ -14,7 +11,7 @@ import { ViewType, User, UserRole, LoginData, RegisterData } from './types';
 import { api } from './services/api';
 
 function App() {
-  const [currentView, setCurrentView] = useState<ViewType>('home'); // Changé à 'home' par défaut
+  const [currentView, setCurrentView] = useState<ViewType>('home'); 
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
