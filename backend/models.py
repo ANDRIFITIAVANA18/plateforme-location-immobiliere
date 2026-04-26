@@ -1,6 +1,3 @@
-
-
-# backend/models.py
 import os
 import sys
 import psycopg2
@@ -9,16 +6,16 @@ from contextlib import contextmanager
 from uuid import uuid4
 import hashlib
 
-print("✅ models.py chargé avec succès")
+print(" models.py chargé avec succès")
 
 # Récupère DATABASE_URL depuis les variables d'environnement
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    print("❌ ERREUR : La variable d'environnement DATABASE_URL n'est pas définie.", file=sys.stderr)
+    print(" ERREUR : La variable d'environnement DATABASE_URL n'est pas définie.", file=sys.stderr)
     sys.exit(1)
 
-print(f"ℹ️  Connexion à la base de données : {DATABASE_URL.replace('://postgres:', '://postgres:***')}")
+print(f"  Connexion à la base de données : {DATABASE_URL.replace('://postgres:', '://postgres:***')}")
 
 @contextmanager
 def get_db_connection():
@@ -28,7 +25,7 @@ def get_db_connection():
         conn = psycopg2.connect(DATABASE_URL)
         yield conn
     except psycopg2.OperationalError as e:
-        print(f"❌ Erreur de connexion à la base de données : {e}", file=sys.stderr)
+        print(f" Erreur de connexion à la base de données : {e}", file=sys.stderr)
         raise
     finally:
         if conn:
@@ -55,7 +52,7 @@ def init_db():
                 )
             ''')
             
-            # Table des propriétés - AJOUT DES CHAMPS LATITUDE ET LONGITUDE
+           
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS properties (
                     id TEXT PRIMARY KEY,
@@ -82,7 +79,7 @@ def init_db():
                 )
             ''')
             
-            # Table des réservations
+      
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS bookings (
                     id TEXT PRIMARY KEY,
@@ -99,7 +96,6 @@ def init_db():
                 )
             ''')
             
-            # NOUVELLE TABLE : Demandes de visite
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS visit_requests (
                     id TEXT PRIMARY KEY,
@@ -114,7 +110,7 @@ def init_db():
                 )
             ''')
             
-            # NOUVELLE TABLE : Messages
+           
             cur.execute('''
                 CREATE TABLE IF NOT EXISTS messages (
                     id TEXT PRIMARY KEY,
@@ -128,7 +124,7 @@ def init_db():
             ''')
             
             conn.commit()
-    print("✅ Tables créées ou déjà existantes.")
+    print(" Tables créées ou déjà existantes.")
 
 # === Fonctions pour les utilisateurs ===
 
@@ -171,8 +167,6 @@ def verify_user_credentials(email, password):
         return {k: v for k, v in user.items() if k != 'password_hash'}
     return None
 
-# === Fonctions pour les propriétés ===
-
 def get_all_properties():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -204,8 +198,8 @@ def create_property(data):
                 data.get('address', ''),
                 data['city'],
                 data.get('country', 'France'),
-                data.get('latitude'),  # NOUVEAU CHAMP
-                data.get('longitude'), # NOUVEAU CHAMP
+                data.get('latitude'),  
+                data.get('longitude'), 
                 data['price_per_night'],
                 data.get('price_type', 'night'),
                 data['bedrooms'],
@@ -357,7 +351,7 @@ def update_booking_status(booking_id, new_status):
                 (new_status, booking_id)
             )
             
-            # CORRECTION : Gérer la disponibilité de manière plus intelligente
+            #  Gérer la disponibilité de manière plus intelligente
             if new_status == 'confirmed':
                 # Si confirmée, rendre le bien indisponible
                 cur.execute(
@@ -370,8 +364,7 @@ def update_booking_status(booking_id, new_status):
                     "UPDATE properties SET is_available = TRUE WHERE id = %s",
                     (property_id,)
                 )
-            # Note: La suppression d'une réservation (delete_booking) ne touche PAS à la disponibilité
-            
+
             conn.commit()
     
     return get_booking_by_id(booking_id)
@@ -380,19 +373,17 @@ def delete_booking(booking_id):
     """Supprime une réservation - NE CHANGE PAS la disponibilité du bien"""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            # CORRECTION : Récupérer le statut avant suppression pour log
+            #  Récupérer le statut avant suppression pour log
             cur.execute("SELECT status, property_id FROM bookings WHERE id = %s", (booking_id,))
             result = cur.fetchone()
             
             if result:
                 status, property_id = result
-                print(f"🔍 Suppression réservation - Statut: {status}, Property: {property_id}")
-                # IMPORTANT : On ne change PAS is_available ici
+                print(f" Suppression réservation - Statut: {status}, Property: {property_id}")
+         
             
             cur.execute("DELETE FROM bookings WHERE id = %s", (booking_id,))
             conn.commit()
-
-# === NOUVELLES FONCTIONS : Demandes de visite ===
 
 def create_visit_request(property_id, user_id, requested_date, requested_time, message=None):
     """Crée une nouvelle demande de visite"""
