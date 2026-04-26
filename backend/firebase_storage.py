@@ -11,7 +11,7 @@ def init_firebase():
     try:
         # Vérifier si Firebase est déjà initialisé
         if firebase_admin._apps:
-            print("✅ Firebase déjà initialisé")
+            print(" Firebase déjà initialisé")
             return True
             
         # Chemin vers le fichier service account
@@ -19,9 +19,9 @@ def init_firebase():
         
         if os.path.exists(service_account_path):
             cred = credentials.Certificate(service_account_path)
-            print("✅ Firebase initialisé avec le fichier service account")
+            print(" Firebase initialisé avec le fichier service account")
         else:
-            print("❌ Fichier firebase-service-account.json non trouvé")
+            print(" Fichier firebase-service-account.json non trouvé")
             return False
         
         # Initialiser Firebase avec votre project_id
@@ -29,11 +29,11 @@ def init_firebase():
             'storageBucket': 'location-e0c6d.appspot.com'  # Votre project_id + .appspot.com
         })
         
-        print("🚀 Firebase Storage prêt à être utilisé")
+        print(" Firebase Storage prêt à être utilisé")
         return True
         
     except Exception as e:
-        print(f"❌ Erreur initialisation Firebase: {e}")
+        print(f" Erreur initialisation Firebase: {e}")
         return False
 
 def upload_property_image(file, property_id=None):
@@ -60,7 +60,7 @@ def upload_property_image(file, property_id=None):
         
         filename = f"{folder}/{timestamp}_{unique_id}_{safe_filename}"
         
-        print(f"📤 Upload de l'image: {filename}")
+        print(f" Upload de l'image: {filename}")
         
         # Upload vers Firebase Storage
         blob = bucket.blob(filename)
@@ -72,11 +72,11 @@ def upload_property_image(file, property_id=None):
         # Rendre le fichier public
         blob.make_public()
         
-        print(f"✅ Image uploadée avec succès: {blob.public_url}")
+        print(f" Image uploadée avec succès: {blob.public_url}")
         return blob.public_url
         
     except Exception as e:
-        print(f"❌ Erreur lors de l'upload Firebase: {e}")
+        print(f" Erreur lors de l'upload Firebase: {e}")
         return None
 
 def delete_property_image(image_url):
@@ -107,11 +107,11 @@ def delete_property_image(image_url):
             blob = bucket.blob(file_path)
             blob.delete()
             
-            print(f"🗑️ Image supprimée: {file_path}")
+            print(f" Image supprimée: {file_path}")
             return True
             
         return False
             
     except Exception as e:
-        print(f"❌ Erreur suppression image: {e}")
+        print(f" Erreur suppression image: {e}")
         return False
