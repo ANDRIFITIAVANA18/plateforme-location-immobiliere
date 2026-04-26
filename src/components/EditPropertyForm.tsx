@@ -1,6 +1,3 @@
-
-
-// src/components/EditPropertyForm.tsx
 import { useState, useEffect } from 'react';
 import { X, Upload, MapPin, Home, Bed, Bath, Users, DollarSign, Image as ImageIcon } from 'lucide-react';
 import { Property } from '../types';
@@ -77,12 +74,12 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
   const [imageErrors, setImageErrors] = useState<Set<number>>(new Set());
 
   const propertyTypes = [
-    { value: 'apartment', label: '🏢 Appartement' },
-    { value: 'house', label: '🏠 Maison' },
-    { value: 'villa', label: '🏡 Villa' },
-    { value: 'studio', label: '🔧 Studio' },
-    { value: 'loft', label: '🏭 Loft' },
-    { value: 'chalet', label: '⛰️ Chalet' }
+    { value: 'apartment', label: ' Appartement' },
+    { value: 'house', label: ' Maison' },
+    { value: 'villa', label: ' Villa' },
+    { value: 'studio', label: ' Studio' },
+    { value: 'loft', label: ' Loft' },
+    { value: 'chalet', label: ' Chalet' }
   ];
 
   const amenitiesList = ['WiFi', 'Parking', 'Piscine', 'Climatisation', 'Chauffage', 'Cuisine équipée', 'TV', 'Lave-linge', 'Animaux acceptés', 'Jardin', 'Terrasse', 'Balcon'];
@@ -187,7 +184,7 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
 
         if (response.ok) {
           const data = await response.json();
-          console.log('✅ Upload réussi:', data);
+          console.log(' Upload réussi:', data);
           if (data.imageUrls && Array.isArray(data.imageUrls)) {
             uploadedUrls.push(...data.imageUrls);
           }
@@ -195,7 +192,7 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
           throw new Error(`Erreur serveur: ${response.status}`);
         }
       } catch (serverError) {
-        console.warn('❌ Échec upload serveur local, utilisation IMGBB:', serverError);
+        console.warn(' Échec upload serveur local, utilisation IMGBB:', serverError);
         
         // Fallback: Upload vers IMGBB
         for (const file of validFiles) {
@@ -215,14 +212,14 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
               }
             }
           } catch (imgbbError) {
-            console.error('❌ Échec upload IMGBB:', imgbbError);
+            console.error(' Échec upload IMGBB:', imgbbError);
           }
         }
       }
 
       // Si aucun upload n'a fonctionné, utiliser des images de fallback
       if (uploadedUrls.length === 0) {
-        console.log('🔄 Utilisation des images de fallback');
+        console.log('Utilisation des images de fallback');
         const fallbackImages = getFallbackImages();
         uploadedUrls.push(...fallbackImages.slice(0, validFiles.length));
       }
@@ -239,7 +236,7 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
       }
 
     } catch (error: any) {
-      console.error('❌ Erreur upload images:', error);
+      console.error(' Erreur upload images:', error);
       setError(error.message || 'Erreur lors du téléchargement des images');
     } finally {
       setUploading(false);
@@ -278,7 +275,7 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
 
   // Gestionnaire d'erreur d'image
   const handleImageError = (index: number, imageUrl: string) => {
-    console.error(`❌ Erreur chargement image ${index}:`, imageUrl);
+    console.error(` Erreur chargement image ${index}:`, imageUrl);
     setImageErrors(prev => new Set(prev).add(index));
     
     // Remplacer l'image corrompue par une image de fallback
@@ -393,7 +390,7 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
     setError('');
 
     try {
-      console.log('📤 Envoi des données de modification:', formData);
+      console.log(' Envoi des données de modification:', formData);
 
       // Nettoyer les images avant envoi
       const cleanedFormData = {
@@ -419,11 +416,11 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
       const responseData = await response.json();
 
       if (response.ok) {
-        console.log('✅ Propriété modifiée avec succès:', responseData);
+        console.log(' Propriété modifiée avec succès:', responseData);
         alert('Propriété modifiée avec succès !');
         onPropertyUpdated();
       } else {
-        console.error('❌ Erreur API:', responseData);
+        console.error(' Erreur API:', responseData);
         throw new Error(responseData.error || `Erreur ${response.status}`);
       }
     } catch (error: any) {
@@ -453,7 +450,7 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
           {error && (
             <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded">
               <div className="flex">
-                <div className="flex-shrink-0">⚠️</div>
+                <div className="flex-shrink-0"></div>
                 <div className="ml-3">
                   <p className="text-sm">{error}</p>
                 </div>
@@ -556,7 +553,7 @@ export default function EditPropertyForm({ property, onPropertyUpdated, onCancel
             {selectedAddress && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
                 <div className="flex items-center">
-                  <div className="text-blue-600 text-sm mr-2">📍</div>
+                  <div className="text-blue-600 text-sm mr-2"></div>
                   <div>
                     <p className="text-blue-800 text-sm font-medium">
                       Adresse détectée
