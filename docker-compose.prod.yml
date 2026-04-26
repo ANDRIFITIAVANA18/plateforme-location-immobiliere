@@ -6,7 +6,7 @@ services:
     container_name: plateforme-app
     ports:
       - "3100:80"
-    restart: unless-stopped  # ✅ REDÉMARRAGE AUTOMATIQUE
+    restart: unless-stopped  #  REDÉMARRAGE AUTOMATIQUE
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/ || exit 1"]
       interval: 30s
@@ -29,7 +29,7 @@ services:
       sh -c "
         while true; do
           sleep 86400
-          echo '✅ Backup quotidien effectué: $(date)'
+          echo ' Backup quotidien effectué: $(date)'
         done
       "
 
